@@ -1,6 +1,7 @@
 export type UnitType = "mass" | "volume" | "labour" | "area" | "water depth" | "lump sum";
 export type UnitName = "kg" | "g" | "tonne" | "50 kg bag" | "25 kg bag" | "l" | "ml" | "day" | "ha" | "acre" | "mm" | "lump sum";
 export type AreaUnit = "ha" | "acres";
+export type RateInputMode = "per_area" | "farm_total";
 export type YieldUnit = "kg per ha" | "tonnes per ha";
 export type PriceUnit = "MWK per kg" | "MWK per tonne" | "MWK per 50 kg bag";
 export type TransportArrangement = "farm_gate" | "transport_required" | null;
@@ -30,6 +31,8 @@ export interface CostItem {
   name: string;
   description: string;
   rate: number | null;
+  /** Display/input preference; rate remains stored per hectare. */
+  rateInputMode?: RateInputMode;
   rateUnit: UnitName | null;
   price: number | null;
   priceUnit: UnitName | null;
