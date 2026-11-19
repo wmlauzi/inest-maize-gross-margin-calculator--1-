@@ -1,6 +1,4 @@
-import type { AreaUnit, UnitName } from "../types/index.ts";
-
-type AreaRateUnit = Extract<UnitName, "ha" | "acre">;
+import type { AreaUnit } from "../types/index.ts";
 
 export interface AreaUnitText {
   unit: AreaUnit;
@@ -10,8 +8,6 @@ export interface AreaUnitText {
   rateLabel: string;
   inputHint: string;
   validationMessage: string;
-  defaultRateUnit: AreaRateUnit;
-  defaultRateUnitLabel: "Ha" | "Acre";
 }
 
 const AREA_UNIT_TEXT: Record<AreaUnit, AreaUnitText> = {
@@ -23,8 +19,6 @@ const AREA_UNIT_TEXT: Record<AreaUnit, AreaUnitText> = {
     rateLabel: "Rate per ha",
     inputHint: "Enter the quantity or rate per ha",
     validationMessage: "Enter the quantity or rate per ha.",
-    defaultRateUnit: "ha",
-    defaultRateUnitLabel: "Ha",
   },
   acres: {
     unit: "acres",
@@ -34,8 +28,6 @@ const AREA_UNIT_TEXT: Record<AreaUnit, AreaUnitText> = {
     rateLabel: "Rate per acre",
     inputHint: "Enter the quantity or rate per acre",
     validationMessage: "Enter the quantity or rate per acre.",
-    defaultRateUnit: "acre",
-    defaultRateUnitLabel: "Acre",
   },
 };
 
