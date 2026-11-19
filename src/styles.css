@@ -2078,6 +2078,11 @@ button {
   min-height: 132px;
 }
 
+.cost-summary .cost-total-status.is-partial {
+  color: var(--warn);
+  font-weight: 600;
+}
+
 .cost-category-section,
 .cost-converters {
   min-width: 0;

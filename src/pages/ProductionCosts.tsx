@@ -94,6 +94,15 @@ export default function ProductionCosts() {
   const areaUnit = inputs.areaUnit ?? "ha";
   const areaRequirementLabel = areaUnit === "acres" ? "acre" : "ha";
   const areaRequirementValue = (valuePerHa: number) => areaRequirementPerUnit(valuePerHa, areaUnit);
+  const countedCostItems = r.categories.reduce((total, category) => total + category.countedItems, 0);
+  const problemCostItems = r.categories.reduce((total, category) => total + category.problemItems, 0);
+  const canShowCostTotals = r.status === "ready" || countedCostItems > 0;
+  const partialTotalMessage = problemCostItems > 0
+    ? "Partial total; incomplete cost entries are excluded."
+    : "Entered costs only; complete the budget to confirm the total.";
+  const noCostTotalMessage = problemCostItems > 0
+    ? "No complete cost entries to total yet. Resolve the items needing attention."
+    : "No costs entered yet. Complete the budget to confirm a zero total.";
   return <div className="production-costs-page">
     <header className="production-costs-intro">
       <p className="costs-eyebrow">BUDGET SETUP · STEP 2</p>
@@ -102,8 +111,16 @@ export default function ProductionCosts() {
     </header>
     {inputs.transportArrangement === null && <div className="note" role="alert">Select a transport arrangement in the Transport category before completing this budget.</div>}
     <section className="cost-summary" aria-label="Variable cost summary">
-      <Kpi label={`Total variable costs per ${areaRequirementLabel}`} value={mwk(areaRequirementValue(r.tvcPerHa))} />
-      <Kpi label="Total whole-farm variable costs" value={mwk(r.tvcFarm)} sub={r.tvcFarm === null ? "Whole-farm total unavailable until farm area is entered" : undefined} />
+      <Kpi label={`Total variable costs per ${areaRequirementLabel}`}
+        value={canShowCostTotals ? mwk(areaRequirementValue(r.tvcPerHa)) : "Pending"}
+        sub={r.status === "ready" ? undefined : canShowCostTotals
+          ? <span className="cost-total-status is-partial">{partialTotalMessage}</span>
+          : <span className="cost-total-status">{noCostTotalMessage}</span>} />
+      <Kpi label="Total whole-farm variable costs"
+        value={canShowCostTotals && r.tvcFarm !== null ? mwk(r.tvcFarm) : "Pending"}
+        sub={r.status === "ready" ? undefined : !canShowCostTotals ? noCostTotalMessage
+          : r.tvcFarm === null ? "Enter a valid farm area to calculate the whole-farm total."
+            : <span className="cost-total-status is-partial">{partialTotalMessage}</span>} />
     </section>
     <section className="cost-category-section" aria-labelledby="cost-category-heading">
       <div className="cost-category-intro">
@@ -111,8 +128,8 @@ export default function ProductionCosts() {
         <p>Open a category to enter or review its cost items. Unused items do not affect your budget.</p>
       </div>
     {COST_CATEGORIES.map((c, n) => { const cr = r.categories[n]; const mine = items.filter((i) => i.categoryId === c.id);
-      const stateLabel = cr.problemItems > 0 ? "Needs attention" : cr.countedItems > 0 ? "Complete" : mine.length > 0 ? "Review item" : "No costs entered";
-      const stateClass = cr.problemItems > 0 ? "c-warn" : cr.countedItems > 0 ? "c-ok" : mine.length > 0 ? "c-warn" : "c-n";
+      const stateLabel = cr.problemItems > 0 ? "Needs attention" : cr.countedItems > 0 ? "Complete" : cr.itemCount > 0 ? "Review item" : "No costs entered";
+      const stateClass = cr.problemItems > 0 ? "c-warn" : cr.countedItems > 0 ? "c-ok" : cr.itemCount > 0 ? "c-warn" : "c-n";
       return <details className={`cat cost-category ${cr.problemItems > 0 ? "has-problems" : ""}`} key={c.id}>
         <summary className="cost-category-summary">
           <span className="cost-category-name"><span className="cost-category-number">{String(n + 1).padStart(2, "0")}</span><span>{c.name}</span></span>
