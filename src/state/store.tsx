@@ -3,7 +3,7 @@ import { computeBudget } from "../calculations/grossMargin.ts";
 import { COST_CATEGORIES, TRANSPORT_ITEM_ID } from "../data/costCategories.ts";
 import { AREA_UNITS, PRICE_FACTORS, UNITS, YIELD_FACTORS } from "../data/units.ts";
 import type {
-  AreaUnit, BudgetInputs, BudgetResult, CategoryId, CostItem, PriceUnit, RateInputMode, TransportArrangement, UnitName, YieldUnit,
+  AreaUnit, BudgetInputs, BudgetResult, CategoryId, CostItem, PriceUnit, TransportArrangement, UnitName, YieldUnit,
 } from "../types/index.ts";
 
 export interface State { inputs: BudgetInputs; items: CostItem[]; }
