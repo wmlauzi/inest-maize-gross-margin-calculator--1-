@@ -32,10 +32,10 @@ function ItemForm({ item }: { item: CostItem }) {
   const inputMode = item.rateInputMode ?? "per_area";
   const displayRate = item.rate === null ? null : convertAreaRate(item.rate, inputMode, "storage_to_input", inputs.area, areaUnit);
   const rateIssue = touched.rate && res.status === "enter_rate" ? areaUnitText.validationMessage
-    : touched.rate && res.status === "select_unit" ? "Choose a unit for this rate."
+    : touched.rate && res.status === "select_unit" ? `Choose a measurement unit for this rate per ${areaUnitText.unitName}.`
     : touched.rate && res.status === "invalid_value" && item.rate !== null && item.rate < 0 ? "Rate cannot be negative."
-    : touched.rate && res.status === "invalid_unit" && !getUnit(item.rateUnit) ? "Choose a valid rate unit."
-    : touched.rate && res.status === "invalid_factor" && !getUnit(item.rateUnit) ? "Choose a rate unit that can be converted."
+    : touched.rate && res.status === "invalid_unit" && !getUnit(item.rateUnit) ? `Choose a valid measurement unit for this rate per ${areaUnitText.unitName}.`
+    : touched.rate && res.status === "invalid_factor" && !getUnit(item.rateUnit) ? `Choose a convertible measurement unit for this rate per ${areaUnitText.unitName}.`
     : undefined;
   const priceIssue = touched.price && res.status === "price_needed" ? "Enter a unit price."
     : touched.price && res.status === "select_price_unit" ? "Choose the unit used for this price."
@@ -48,7 +48,7 @@ function ItemForm({ item }: { item: CostItem }) {
     dispatch({ t: "input", patch: { transportArrangement: value } });
   return <div className="item cost-item">
     <div className="cost-item-header">{(res.status === "ok" || res.status === "unused" || res.status === "farm_gate" || touched.rate || touched.price) && <StatusChip status={res.status}
-      message={res.status === "enter_rate" ? areaUnitText.validationMessage : undefined} />}
+      message={rateIssue ?? priceIssue ?? (res.status === "enter_rate" ? areaUnitText.validationMessage : undefined)} />}
       {item.userAdded && <button className="btn del" onClick={() => { if (confirm("Remove this cost item?")) dispatch({ t: "remove", id: item.id }); }}>Remove item</button>}</div>
     {linked && <div className="field cost-transport-arrangement" role="radiogroup" aria-label="Transport arrangement" aria-required="true"
       aria-invalid={arrangement === null} aria-describedby={arrangement === null ? `transport-arrangement-error-${item.id}` : undefined}>
