@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeBudget } from "../../calculations/grossMargin.ts";
-import { areaRequirementPerUnit, areaRequirementToHa } from "../../calculations/conversions.ts";
+import { areaRequirementPerUnit, areaRequirementToHa, convertAreaRate } from "../../calculations/conversions.ts";
 import { TRANSPORT_ITEM_ID } from "../../data/costCategories.ts";
 import { loadSavedState, restoreSavedState, saveSavedState, saveStateIfChanged, serializeState, type State, type StorageLike } from "../store.tsx";
 import type { BudgetInputs, CostItem } from "../../types/index.ts";
@@ -87,29 +87,29 @@ describe("saved budget restoration", () => {
       .toBeCloseTo(computeBudget(hectaresInputs, restored.state.items).tvcFarm!, 6);
   });
 
-  it("saves a per-acre entry on the per-hectare basis and reopens it without display drift", () => {
-    const enteredPerAcre = 10;
+  it("saves and reopens a per-acre entry of 10 without display drift", () => {
+    const entered = 10;
     const areaItem: CostItem = {
-      ...transport,
-      id: "area-rate",
-      categoryId: "tractor",
-      name: "Land preparation",
-      rate: areaRequirementToHa(enteredPerAcre, "acres"),
-      rateUnit: "kg",
-      price: 500,
-      priceUnit: "kg",
-      yieldLinked: false,
+      ...transport, id: "area-rate", categoryId: "tractor", name: "Land preparation",
+      rate: convertAreaRate(entered, "per_area", "input_to_storage", 2, "acres"),
+      rateInputMode: "per_area", rateUnit: "kg", price: 500, priceUnit: "kg", yieldLinked: false,
     };
-    const state: State = {
-      inputs: { ...inputs("farm_gate"), areaUnit: "acres" },
-      items: [transport, areaItem],
-    };
+    const state: State = { inputs: { ...inputs("farm_gate"), areaUnit: "acres" }, items: [transport, areaItem] };
     const restored = restoreSavedState(serializeState(state));
-    const savedRate = restored.state.items[1].rate;
-
-    expect(savedRate).toBe(24.7105);
-    expect(areaRequirementPerUnit(savedRate!, "acres")).toBe(enteredPerAcre);
+    expect(restored.state.items[1].rate).toBeCloseTo(24.7105, 9);
+    expect(convertAreaRate(restored.state.items[1].rate!, restored.state.items[1].rateInputMode ?? "per_area",
+      "storage_to_input", restored.state.inputs.area, "acres")).toBeCloseTo(10, 9);
     expect(restored.state.items[1]).toEqual(areaItem);
+  });
+
+  it("persists the farm-total entry mode and restores its total display value", () => {
+    const rate = convertAreaRate(100, "farm_total", "input_to_storage", 2, "acres");
+    const areaItem: CostItem = { ...transport, id: "total-rate", categoryId: "tractor", rate,
+      rateInputMode: "farm_total", rateUnit: "kg", price: 500, priceUnit: "kg", yieldLinked: false };
+    const state: State = { inputs: { ...inputs("farm_gate"), areaUnit: "acres" }, items: [transport, areaItem] };
+    const restored = restoreSavedState(serializeState(state));
+    expect(restored.state.items[1].rateInputMode).toBe("farm_total");
+    expect(convertAreaRate(restored.state.items[1].rate!, "farm_total", "storage_to_input", 2, "acres")).toBeCloseTo(100, 9);
   });
 
   it("loads existing per-hectare rates unchanged and derives the selected display value", () => {

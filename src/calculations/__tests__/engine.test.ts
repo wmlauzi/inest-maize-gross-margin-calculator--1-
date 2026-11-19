@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  areaRequirementPerUnit, areaRequirementToHa, areaToHa, convertMass, convertPrice, convertUnits, haToAcres, priceToPerKg, truckloadPrice, yieldToKgHa,
+  areaRequirementPerUnit, areaRequirementToHa, areaToHa, convertAreaRate, convertMass, convertPrice, convertUnits, haToAcres, priceToPerKg, truckloadPrice, yieldToKgHa,
 } from "../conversions.ts";
 import { computeBudget } from "../grossMargin.ts";
 import { itemStatus } from "../validation.ts";
@@ -64,16 +64,25 @@ describe("conversions (workbook Checks 6-18)", () => {
     expect(areaRequirementPerUnit(storedPerHa, "acres")).toBe(10);
     expect(areaRequirementToHa(10, "ha")).toBe(10);
   });
+  it("converts per-area input to per-hectare storage and back for both farm units", () => {
+    expect(convertAreaRate(10, "per_area", "input_to_storage", 5, "acres")).toBeCloseTo(24.7105, 9);
+    expect(convertAreaRate(24.7105, "per_area", "storage_to_input", 5, "acres")).toBeCloseTo(10, 9);
+    expect(convertAreaRate(10, "per_area", "input_to_storage", 5, "ha")).toBe(10);
+  });
+  it("converts a farm-total quantity to per-hectare storage and back", () => {
+    const storedPerHa = convertAreaRate(100, "farm_total", "input_to_storage", 4, "acres")!;
+    expect(storedPerHa).toBeCloseTo(100 / (4 / 2.47105), 9);
+    expect(convertAreaRate(storedPerHa, "farm_total", "storage_to_input", 4, "acres")).toBeCloseTo(100, 9);
+    expect(convertAreaRate(100, "farm_total", "input_to_storage", null, "acres")).toBeNull();
+  });
   it.each([
-    ["acres", "Rate per acre", "Enter the quantity or rate per acre", "Enter the quantity or rate per acre.", "acre", "Acre"],
-    ["ha", "Rate per ha", "Enter the quantity or rate per ha", "Enter the quantity or rate per ha.", "ha", "Ha"],
-  ] as const)("provides consistent rate text and defaults for %s", (unit, label, hint, validation, defaultUnit, defaultLabel) => {
+    ["acres", "Rate per acre", "Enter the quantity or rate per acre", "Enter the quantity or rate per acre."],
+    ["ha", "Rate per ha", "Enter the quantity or rate per ha", "Enter the quantity or rate per ha."],
+  ] as const)("provides consistent rate text for %s", (unit, label, hint, validation) => {
     const text = getAreaUnitText(unit);
     expect(text.rateLabel).toBe(label);
     expect(text.inputHint).toBe(hint);
     expect(text.validationMessage).toBe(validation);
-    expect(text.defaultRateUnit).toBe(defaultUnit);
-    expect(text.defaultRateUnitLabel).toBe(defaultLabel);
   });
   it("10 t/ha = 10,000 kg/ha", () => expect(yieldToKgHa(10, "tonnes per ha")).toBeCloseTo(10000, 9));
   it("MWK 2,500 per 50 kg bag = MWK 50 per kg", () => expect(priceToPerKg(2500, "MWK per 50 kg bag")).toBeCloseTo(50, 9));
