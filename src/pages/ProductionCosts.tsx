@@ -1,9 +1,10 @@
 import { Field, Kpi, Num, StatusChip } from "../components/common";
 import Converters from "../components/Converters";
+import { useState } from "react";
 import { useStore } from "../state/store";
 import { COST_CATEGORIES } from "../data/costCategories.ts";
 import { UNITS } from "../data/units.ts";
-import { areaRequirementPerUnit, areaRequirementToHa, getUnit } from "../calculations/conversions.ts";
+import { areaRequirementPerUnit, convertAreaRate, getUnit } from "../calculations/conversions.ts";
 import { getAreaUnitText } from "../lib/areaUnitText.ts";
 import { fmt, mwk, pct } from "../lib/format";
 import type { AreaUnit, CostItem, TransportArrangement, UnitName } from "../types/index.ts";
@@ -17,6 +18,7 @@ const UnitSelect = ({ value, onChange, only, label, invalid, errorId }: {
 
 function ItemForm({ item }: { item: CostItem }) {
   const { result: r, dispatch, inputs } = useStore();
+  const [touched, setTouched] = useState({ rate: false, price: false });
   const res = r.items[item.id]; const up = (patch: Partial<CostItem>) => dispatch({ t: "update", id: item.id, patch });
   const linked = !!item.yieldLinked;
   const arrangement = inputs.transportArrangement;
@@ -27,24 +29,26 @@ function ItemForm({ item }: { item: CostItem }) {
   const rt = getUnit(linked ? "kg" : effectiveRateUnit)?.type;
   const std = res.stdUnit;
   const areaRequirementValue = (valuePerHa: number) => areaRequirementPerUnit(valuePerHa, areaUnit);
-  const rateIssue = res.status === "enter_rate" ? areaUnitText.validationMessage
-    : res.status === "select_unit" ? "Choose a unit for this rate."
-    : res.status === "invalid_value" && item.rate !== null && item.rate < 0 ? "Rate cannot be negative."
-    : res.status === "invalid_unit" && !getUnit(item.rateUnit) ? "Choose a valid rate unit."
-    : res.status === "invalid_factor" && !getUnit(item.rateUnit) ? "Choose a rate unit that can be converted."
+  const inputMode = item.rateInputMode ?? "per_area";
+  const displayRate = item.rate === null ? null : convertAreaRate(item.rate, inputMode, "storage_to_input", inputs.area, areaUnit);
+  const rateIssue = touched.rate && res.status === "enter_rate" ? areaUnitText.validationMessage
+    : touched.rate && res.status === "select_unit" ? "Choose a unit for this rate."
+    : touched.rate && res.status === "invalid_value" && item.rate !== null && item.rate < 0 ? "Rate cannot be negative."
+    : touched.rate && res.status === "invalid_unit" && !getUnit(item.rateUnit) ? "Choose a valid rate unit."
+    : touched.rate && res.status === "invalid_factor" && !getUnit(item.rateUnit) ? "Choose a rate unit that can be converted."
     : undefined;
-  const priceIssue = res.status === "price_needed" ? "Enter a unit price."
-    : res.status === "select_price_unit" ? "Choose the unit used for this price."
-    : res.status === "unit_mismatch" ? "Choose a price unit that matches the rate unit type."
-    : res.status === "invalid_value" && item.price !== null && item.price < 0 ? "Price cannot be negative."
-    : res.status === "invalid_unit" && getUnit(item.rateUnit) ? "Choose a valid price unit."
-    : res.status === "invalid_factor" && getUnit(item.rateUnit) ? "Choose a price unit that can be converted."
+  const priceIssue = touched.price && res.status === "price_needed" ? "Enter a unit price."
+    : touched.price && res.status === "select_price_unit" ? "Choose the unit used for this price."
+    : touched.price && res.status === "unit_mismatch" ? "Choose a price unit that matches the rate unit type."
+    : touched.price && res.status === "invalid_value" && item.price !== null && item.price < 0 ? "Price cannot be negative."
+    : touched.price && res.status === "invalid_unit" && getUnit(item.rateUnit) ? "Choose a valid price unit."
+    : touched.price && res.status === "invalid_factor" && getUnit(item.rateUnit) ? "Choose a price unit that can be converted."
     : undefined;
   const setArrangement = (value: Exclude<TransportArrangement, null>) =>
     dispatch({ t: "input", patch: { transportArrangement: value } });
   return <div className="item cost-item">
-    <div className="cost-item-header"><StatusChip status={res.status}
-      message={res.status === "enter_rate" ? areaUnitText.validationMessage : undefined} />
+    <div className="cost-item-header">{(res.status === "ok" || res.status === "unused" || res.status === "farm_gate" || touched.rate || touched.price) && <StatusChip status={res.status}
+      message={res.status === "enter_rate" ? areaUnitText.validationMessage : undefined} />}
       {item.userAdded && <button className="btn del" onClick={() => { if (confirm("Remove this cost item?")) dispatch({ t: "remove", id: item.id }); }}>Remove item</button>}</div>
     {linked && <div className="field cost-transport-arrangement" role="radiogroup" aria-label="Transport arrangement" aria-required="true"
       aria-invalid={arrangement === null} aria-describedby={arrangement === null ? `transport-arrangement-error-${item.id}` : undefined}>
@@ -66,22 +70,32 @@ function ItemForm({ item }: { item: CostItem }) {
     <div className="fgrid cost-fields">
       <div className="full"><Field label="Item name" htmlFor={`item-name-${item.id}`}><input id={`item-name-${item.id}`} value={item.name} onChange={(e) => up({ name: e.target.value })} readOnly={linked} placeholder="e.g. Basal fertiliser" /></Field></div>
       {(!linked || arrangement !== "farm_gate") && <>
-        <Field label={linked ? `${areaUnitText.rateLabel} (= main expected yield)` : areaUnitText.rateLabel} htmlFor={`item-rate-${item.id}`}><div className="row">
+        <Field label={linked ? `${areaUnitText.rateLabel} (= main expected yield)` : inputMode === "farm_total" ? "Total quantity for my farm" : areaUnitText.rateLabel} htmlFor={`item-rate-${item.id}`}>
+          {!linked && <label className="cost-rate-mode-label" htmlFor={`item-rate-mode-${item.id}`}>Rate entry</label>}
+          {!linked && <select id={`item-rate-mode-${item.id}`} className="cost-rate-mode" aria-label="Rate entry mode" value={inputMode}
+            onChange={(e) => up({ rateInputMode: e.target.value as "per_area" | "farm_total" })}>
+            <option value="per_area">Per {areaUnitText.unitName}</option><option value="farm_total">Total for my farm</option>
+          </select>}
+          <div className="row">
             <Num id={`item-rate-${item.id}`} value={linked
               ? (r.yieldMainKgHa > 0 ? areaRequirementValue(r.yieldMainKgHa) : null)
-              : (item.rate === null ? null : areaRequirementValue(item.rate))}
-              readOnly={linked} onChange={(v) => up({
-                rate: v === null ? null : areaRequirementToHa(v, areaUnit),
+              : displayRate}
+              readOnly={linked} disabled={!linked && inputMode === "farm_total" && !(inputs.area !== null && inputs.area > 0)}
+              onBlur={() => setTouched((prev) => ({ ...prev, rate: true }))}
+              onChange={(v) => up({
+                rate: v === null ? null : convertAreaRate(v, inputMode, "input_to_storage", inputs.area, areaUnit),
               })}
             aria-invalid={!!rateIssue} aria-describedby={rateIssue ? `item-rate-error-${item.id}` : undefined} />
           {linked ? <select disabled aria-label="Rate unit"><option>kg</option></select> : <UnitSelect label="Rate unit" value={effectiveRateUnit} invalid={!!rateIssue}
             errorId={rateIssue ? `item-rate-error-${item.id}` : undefined}
             onChange={(u) => { const t = getUnit(u)?.type; const pt = getUnit(item.priceUnit)?.type; up({ rateUnit: u, priceUnit: !item.priceUnit || (t && pt && t !== pt) ? u : item.priceUnit }); }} />}</div>
-          {!linked && <small className="muted">{areaUnitText.inputHint}</small>}
+          {!linked && <small className="muted">{inputMode === "farm_total"
+            ? "Enter the total quantity for the full farm area."
+            : areaUnitText.inputHint}</small>}
+          {!linked && inputMode === "farm_total" && !(inputs.area !== null && inputs.area > 0) &&
+            <small className="muted">Enter a valid farm area in Farm Setup to use total mode.</small>}
           {rateIssue && <p id={`item-rate-error-${item.id}`} className="err" role="alert">{rateIssue}</p>}</Field>
-        <Field label={`Unit price (MWK per ${effectivePriceUnit ?? "unit"})`} htmlFor={`item-price-${item.id}`}><div className="row"><Num id={`item-price-${item.id}`} value={item.price} onChange={(v) => up({
-            price: v,
-          })}
+        <Field label={`Unit price (MWK per ${effectivePriceUnit ?? "unit"})`} htmlFor={`item-price-${item.id}`}><div className="row"><Num id={`item-price-${item.id}`} value={item.price} onBlur={() => setTouched((prev) => ({ ...prev, price: true }))} onChange={(v) => up({ price: v })>
             aria-invalid={!!priceIssue} aria-describedby={priceIssue ? `item-price-error-${item.id}` : undefined} />
           <UnitSelect label="Price is per" value={effectivePriceUnit} only={rt} invalid={!!priceIssue}
             errorId={priceIssue ? `item-price-error-${item.id}` : undefined}
