@@ -159,7 +159,8 @@ export function restoreSavedState(raw: string | null): RestoreResult {
         name: typeof rawItem.name === "string" ? rawItem.name : "",
         description: typeof rawItem.description === "string" ? rawItem.description : "",
         rate: isNullableNumber(rawItem.rate) ? rawItem.rate : null,
-        rateInputMode: (rawItem.rateInputMode === "farm_total" ? "farm_total" : "per_area") as RateInputMode,
+        ...(rawItem.rateInputMode === "farm_total" ? { rateInputMode: "farm_total" as const } :
+          rawItem.rateInputMode === "per_area" ? { rateInputMode: "per_area" as const } : {}),
         rateUnit,
         price: isNullableNumber(rawItem.price) ? rawItem.price : null,
         priceUnit: priceUnitValue,
