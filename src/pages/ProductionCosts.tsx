@@ -33,6 +33,8 @@ function ItemForm({ item }: { item: CostItem }) {
     ? "existing area unit" : effectivePriceUnit ?? "unit";
   const rt = getUnit(linked ? "kg" : effectiveRateUnit)?.type;
   const std = res.stdUnit;
+  const displayStd = getUnit(item.rateUnit)?.type === "area" && item.rateUnit !== (areaUnit === "ha" ? "ha" : "acre")
+    ? "existing area unit" : getUnit(item.rateUnit)?.type === "area" ? areaUnitText.unitName : std;
   const areaRequirementValue = (valuePerHa: number) => areaRequirementPerUnit(valuePerHa, areaUnit);
   const inputMode = item.rateInputMode ?? "per_area";
   const displayRate = item.rate === null ? null : convertAreaRate(item.rate, inputMode, "storage_to_input", inputs.area, areaUnit);
@@ -130,13 +132,13 @@ function ItemForm({ item }: { item: CostItem }) {
       <Field label="Notes (optional)" htmlFor={`item-notes-${item.id}`}><input id={`item-notes-${item.id}`} value={item.notes} onChange={(e) => up({ notes: e.target.value })} /></Field>
     </div>
     <div className="calc cost-calculations" aria-label="Calculated cost details">
-      <span>Standard rate / {areaUnitText.unitName}: <b>{res.ratePerHaStd ? `${fmt(areaRequirementValue(res.ratePerHaStd), 3)} ${std}` : "–"}</b></span>
-      <span>Price/{std ?? "unit"}: <b>{res.counted ? fmt(res.pricePerStdUnit, 4) : "–"}</b></span>
+      <span>Standard rate / {areaUnitText.unitName}: <b>{res.ratePerHaStd ? `${fmt(areaRequirementValue(res.ratePerHaStd), 3)} ${displayStd}` : "–"}</b></span>
+      <span>Price/{displayStd ?? "unit"}: <b>{res.counted ? fmt(res.pricePerStdUnit, 4) : "–"}</b></span>
       <span>Cost per {areaUnitText.unitName}: <b>{res.counted ? mwk(areaRequirementValue(res.costPerHa)) : "–"}</b></span>
       <span>Whole-farm cost: <b>{res.counted ? mwk(res.costFarm) : "–"}</b></span>
       <span>Share of total: <b>{res.counted ? pct(res.pctOfTotal) : "–"}</b></span>
       {res.farmTonnes !== null && <span>Approx. whole-farm production: <b>{fmt(res.farmTonnes, 3)} t</b> · <b>{fmt(res.farmBags50, 1)}</b> × 50 kg bags</span>}
-      {res.farmQtyStd !== null && res.farmTonnes === null && std && std !== "lump sum" && std !== "mm" && <span>Whole-farm quantity: <b>{fmt(res.farmQtyStd, 2)} {std}</b></span>}
+      {res.farmQtyStd !== null && res.farmTonnes === null && std && std !== "lump sum" && std !== "mm" && <span>Whole-farm quantity: <b>{fmt(res.farmQtyStd, 2)} {displayStd}</b></span>}
       {inputs.area === null && <span className="muted">Enter farm area for whole-farm figures</span>}</div>
   </div>;
 }
