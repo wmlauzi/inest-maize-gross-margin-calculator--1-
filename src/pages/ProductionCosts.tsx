@@ -95,7 +95,7 @@ function ItemForm({ item }: { item: CostItem }) {
           {!linked && inputMode === "farm_total" && !(inputs.area !== null && inputs.area > 0) &&
             <small className="muted">Enter a valid farm area in Farm Setup to use total mode.</small>}
           {rateIssue && <p id={`item-rate-error-${item.id}`} className="err" role="alert">{rateIssue}</p>}</Field>
-        <Field label={`Unit price (MWK per ${effectivePriceUnit ?? "unit"})`} htmlFor={`item-price-${item.id}`}><div className="row"><Num id={`item-price-${item.id}`} value={item.price} onBlur={() => setTouched((prev) => ({ ...prev, price: true }))} onChange={(v) => up({ price: v })>
+        <Field label={`Unit price (MWK per ${effectivePriceUnit ?? "unit"})`} htmlFor={`item-price-${item.id}`}><div className="row"><Num id={`item-price-${item.id}`} value={item.price} onBlur={() => setTouched((prev) => ({ ...prev, price: true }))} onChange={(v) => up({ price: v })} />
             aria-invalid={!!priceIssue} aria-describedby={priceIssue ? `item-price-error-${item.id}` : undefined} />
           <UnitSelect label="Price is per" value={effectivePriceUnit} only={rt} invalid={!!priceIssue}
             errorId={priceIssue ? `item-price-error-${item.id}` : undefined}
