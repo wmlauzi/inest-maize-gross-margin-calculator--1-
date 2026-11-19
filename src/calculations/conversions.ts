@@ -1,6 +1,6 @@
 import { ACRES_PER_HA, KG_PER_TONNE, PRICE_FACTORS, UNITS, YIELD_FACTORS } from "../data/units.ts";
 import type { UnitDef } from "../data/units.ts";
-import type { AreaUnit, PriceUnit, UnitName, YieldUnit } from "../types/index.ts";
+import type { AreaUnit, PriceUnit, RateInputMode, UnitName, YieldUnit } from "../types/index.ts";
 
 export function getUnit(name: string | null | undefined): UnitDef | null {
   if (!name) return null;
@@ -48,6 +48,28 @@ export function areaRequirementPerUnit(valuePerHa: number, unit: AreaUnit): numb
 /** Convert a quantity entered in the selected area unit back to the engine's per-hectare basis. */
 export function areaRequirementToHa(valuePerUnit: number, unit: AreaUnit): number {
   return unit === "ha" ? valuePerUnit : valuePerUnit * ACRES_PER_HA;
+}
+
+/**
+ * Converts a cost-row entry between the selected input mode and the engine's
+ * per-hectare storage basis. In farm-total mode a valid farm area is required.
+ */
+export function convertAreaRate(
+  value: number,
+  mode: RateInputMode,
+  direction: "input_to_storage" | "storage_to_input",
+  area: number | null,
+  areaUnit: AreaUnit,
+): number | null {
+  if (!Number.isFinite(value)) return null;
+  if (mode === "per_area") {
+    return direction === "input_to_storage"
+      ? areaRequirementToHa(value, areaUnit)
+      : areaRequirementPerUnit(value, areaUnit);
+  }
+  if (area === null || !Number.isFinite(area) || area <= 0) return null;
+  const areaHa = areaToHa(area, areaUnit);
+  return direction === "input_to_storage" ? value / areaHa : value * areaHa;
 }
 
 export function yieldToKgHa(value: number, unit: YieldUnit): number {
