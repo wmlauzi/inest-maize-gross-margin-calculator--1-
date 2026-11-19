@@ -9,12 +9,15 @@ import { getAreaUnitText } from "../lib/areaUnitText.ts";
 import { fmt, mwk, pct } from "../lib/format";
 import type { AreaUnit, CostItem, TransportArrangement, UnitName } from "../types/index.ts";
 
-const UnitSelect = ({ value, onChange, only, label, invalid, errorId }: {
-  value: UnitName | null; onChange: (u: UnitName | null) => void; only?: string; label: string; invalid?: boolean; errorId?: string;
-}) =>
-  <select aria-label={label} aria-invalid={invalid} aria-describedby={errorId} value={value ?? ""} onChange={(e) => onChange((e.target.value || null) as UnitName | null)}>
-    <option value="">Unit…</option>{UNITS.filter((u) => !only || u.type === only).map((u) =>
-      <option key={u.name} value={u.name}>{u.label}</option>)}</select>;
+const UnitSelect = ({ value, onChange, only, label, invalid, errorId, areaUnit }: {
+  value: UnitName | null; onChange: (u: UnitName | null) => void; only?: string; label: string; invalid?: boolean; errorId?: string; areaUnit: AreaUnit;
+}) => {
+  const selectedAreaUnit = areaUnit === "ha" ? "ha" : "acre";
+  return <select aria-label={label} aria-invalid={invalid} aria-describedby={errorId} value={value ?? ""} onChange={(e) => onChange((e.target.value || null) as UnitName | null)}>
+    <option value="">Unit…</option>{UNITS.filter((u) => (!only || u.type === only) &&
+      (u.type !== "area" || u.name === selectedAreaUnit || u.name === value)).map((u) =>
+      <option key={u.name} value={u.name}>{u.type !== "area" ? u.label : u.name === selectedAreaUnit ? selectedAreaUnit : "Existing area unit (review)"}</option>)}</select>;
+};
 
 function ItemForm({ item }: { item: CostItem }) {
   const { result: r, dispatch, inputs } = useStore();
@@ -26,6 +29,8 @@ function ItemForm({ item }: { item: CostItem }) {
   const areaUnitText = getAreaUnitText(areaUnit);
   const effectiveRateUnit = item.rateUnit;
   const effectivePriceUnit = item.priceUnit ?? effectiveRateUnit;
+  const priceUnitLabel = getUnit(effectivePriceUnit)?.type === "area" && effectivePriceUnit !== (areaUnit === "ha" ? "ha" : "acre")
+    ? "existing area unit" : effectivePriceUnit ?? "unit";
   const rt = getUnit(linked ? "kg" : effectiveRateUnit)?.type;
   const std = res.stdUnit;
   const areaRequirementValue = (valuePerHa: number) => areaRequirementPerUnit(valuePerHa, areaUnit);
@@ -86,21 +91,39 @@ function ItemForm({ item }: { item: CostItem }) {
                 rate: v === null ? null : convertAreaRate(v, inputMode, "input_to_storage", inputs.area, areaUnit),
               })}
             aria-invalid={!!rateIssue} aria-describedby={rateIssue ? `item-rate-error-${item.id}` : undefined} />
-          {linked ? <select disabled aria-label="Rate unit"><option>kg</option></select> : <UnitSelect label="Rate unit" value={effectiveRateUnit} invalid={!!rateIssue}
+          {linked ? <select disabled aria-label="Rate unit"><option>kg</option></select> : <UnitSelect label="Rate unit" value={effectiveRateUnit} areaUnit={areaUnit} invalid={!!rateIssue}
             errorId={rateIssue ? `item-rate-error-${item.id}` : undefined}
-            onChange={(u) => { setTouched((prev) => ({ ...prev, rate: true })); const t = getUnit(u)?.type; const pt = getUnit(item.priceUnit)?.type; up({ rateUnit: u, priceUnit: !item.priceUnit || (t && pt && t !== pt) ? u : item.priceUnit }); }} />}</div>
+            onChange={(u) => {
+              setTouched((prev) => ({ ...prev, rate: true }));
+              const oldRateUnit = getUnit(item.rateUnit); const newRateUnit = getUnit(u);
+              const oldPriceUnit = getUnit(item.priceUnit);
+              const nextPriceUnit = !item.priceUnit || item.priceUnit === item.rateUnit ||
+                (newRateUnit?.type && oldPriceUnit?.type && newRateUnit.type !== oldPriceUnit.type) ? u : item.priceUnit;
+              const newPriceUnit = getUnit(nextPriceUnit);
+              const rate = item.rate !== null && oldRateUnit?.type === "area" && newRateUnit?.type === "area"
+                ? item.rate * oldRateUnit.factor / newRateUnit.factor : item.rate;
+              const price = item.price !== null && oldPriceUnit?.type === "area" && newPriceUnit?.type === "area"
+                ? item.price * newPriceUnit.factor / oldPriceUnit.factor : item.price;
+              up({ rateUnit: u, rate, priceUnit: nextPriceUnit, price });
+            }} />}</div>
           {!linked && <small className="muted">{inputMode === "farm_total"
             ? "Enter the total quantity for the full farm area."
             : areaUnitText.inputHint}</small>}
           {!linked && inputMode === "farm_total" && !(inputs.area !== null && inputs.area > 0) &&
             <small className="muted">Enter a valid farm area in Farm Setup to use total mode.</small>}
           {rateIssue && <p id={`item-rate-error-${item.id}`} className="err" role="alert">{rateIssue}</p>}</Field>
-        <Field label={`Unit price (MWK per ${effectivePriceUnit ?? "unit"})`} htmlFor={`item-price-${item.id}`}><div className="row"><Num id={`item-price-${item.id}`} value={item.price} onBlur={() => setTouched((prev) => ({ ...prev, price: true }))}
+        <Field label={`Unit price (MWK per ${priceUnitLabel})`} htmlFor={`item-price-${item.id}`}><div className="row"><Num id={`item-price-${item.id}`} value={item.price} onBlur={() => setTouched((prev) => ({ ...prev, price: true }))}
             onChange={(v) => up({ price: v })} aria-invalid={!!priceIssue}
             aria-describedby={priceIssue ? `item-price-error-${item.id}` : undefined} />
-          <UnitSelect label="Price is per" value={effectivePriceUnit} only={rt} invalid={!!priceIssue}
+          <UnitSelect label="Price is per" value={effectivePriceUnit} only={rt} areaUnit={areaUnit} invalid={!!priceIssue}
             errorId={priceIssue ? `item-price-error-${item.id}` : undefined}
-            onChange={(u) => { setTouched((prev) => ({ ...prev, price: true })); up({ priceUnit: u }); }} /></div>
+            onChange={(u) => {
+              setTouched((prev) => ({ ...prev, price: true }));
+              const oldUnit = getUnit(item.priceUnit); const newUnit = getUnit(u);
+              const price = item.price !== null && oldUnit?.type === "area" && newUnit?.type === "area"
+                ? item.price * newUnit.factor / oldUnit.factor : item.price;
+              up({ priceUnit: u, price });
+            }} /></div>
           {priceIssue && <p id={`item-price-error-${item.id}`} className="err" role="alert">{priceIssue}</p>}</Field>
       </>}
       <Field label="Description (optional)" htmlFor={`item-description-${item.id}`}><input id={`item-description-${item.id}`} value={item.description} onChange={(e) => up({ description: e.target.value })} /></Field>
