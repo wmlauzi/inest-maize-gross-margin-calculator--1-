@@ -37,7 +37,7 @@ export const STATUS_MESSAGE: Record<ItemStatus, string> = {
   unused: "Not used",
   ok: "Complete",
   invalid_value: "Amounts cannot be negative; check the rate and price",
-  enter_rate: "Enter the quantity or rate per hectare",
+  enter_rate: "Enter the quantity or rate",
   select_unit: "Choose a unit for the quantity or rate",
   invalid_unit: "Choose a valid unit",
   price_needed: "Enter the unit price",

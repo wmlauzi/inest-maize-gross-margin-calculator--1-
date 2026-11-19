@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { GM_NOTE, StatusBadge } from "../components/common";
 import { useStore } from "../state/store";
 import { fmt, mwk } from "../lib/format";
+import { formatAreaUnitMessage, getAreaUnitText } from "../lib/areaUnitText.ts";
+import { areaRequirementPerUnit } from "../calculations/conversions.ts";
+import type { AreaUnit } from "../types/index.ts";
 import type { PageId } from "../App";
 
 type WorkflowState = "complete" | "in_progress" | "pending";
@@ -39,6 +42,8 @@ function FinancialMetric({
 
 export default function Dashboard({ go }: { go: (p: PageId) => void }) {
   const { inputs, items, result: r, dispatch } = useStore();
+  const areaUnit: AreaUnit = inputs.areaUnit ?? "ha";
+  const areaUnitText = getAreaUnitText(areaUnit);
   const [confirm, setConfirm] = useState(false);
   const startNewButton = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
@@ -96,7 +101,7 @@ export default function Dashboard({ go }: { go: (p: PageId) => void }) {
     inputs.season.trim() ? { label: "Season", value: inputs.season.trim() } : null,
     inputs.area !== null ? {
       label: "Farm area",
-      value: `${fmt(inputs.area)} ${inputs.areaUnit === "ha" ? "ha" : inputs.areaUnit ?? ""}`.trim(),
+      value: `${fmt(inputs.area)} ${areaUnitText.pluralUnitName}`,
     } : null,
     inputs.yieldMain !== null ? {
       label: "Main expected yield",
@@ -107,7 +112,7 @@ export default function Dashboard({ go }: { go: (p: PageId) => void }) {
       value: `${mwk(inputs.price, 2)}${inputs.priceUnit ? ` / ${inputs.priceUnit.replace("MWK per ", "")}` : ""}`,
     } : null,
   ].filter((item): item is { label: string; value: string } => item !== null);
-  const categoryUnit = r.areaHa !== null ? "whole farm" : "per hectare";
+  const categoryUnit = r.areaHa !== null ? "whole farm" : `per ${areaUnitText.unitName}`;
 
   return <div className="dashboard">
     <section className="dashboard-section dashboard-calculation" aria-labelledby="dashboard-calculation-heading">
@@ -163,7 +168,9 @@ export default function Dashboard({ go }: { go: (p: PageId) => void }) {
         {remaining.length === 0
           ? <p>All required inputs and started cost items are complete.</p>
           : <><p>{r.status === "not_started" ? "Start Farm Setup to begin your budget." : "What remains to complete this budget:"}</p>
-            {r.status !== "not_started" && <ul>{remaining.map((issue, index) => <li key={`${issue.field}-${index}`}>{issue.message}</li>)}</ul>}</>}
+            {r.status !== "not_started" && <ul>{remaining.map((issue, index) => <li key={`${issue.field}-${index}`}>
+              {formatAreaUnitMessage(issue.message, areaUnit)}
+            </li>)}</ul>}</>}
       </div>
     </section>
 
@@ -186,9 +193,9 @@ export default function Dashboard({ go }: { go: (p: PageId) => void }) {
           featured
         />
         <FinancialMetric
-          label="Gross Margin per hectare"
-          value={r.main ? mwk(r.main.grossMarginPerHa) : "Pending"}
-          detail="MWK / ha"
+          label={`Gross Margin per ${areaUnitText.unitName}`}
+          value={r.main ? mwk(areaRequirementPerUnit(r.main.grossMarginPerHa, areaUnit)) : "Pending"}
+          detail={`MWK / ${areaUnitText.unitName}`}
         />
         <FinancialMetric
           label="Expected Revenue"
@@ -231,7 +238,9 @@ export default function Dashboard({ go }: { go: (p: PageId) => void }) {
             ? "Select transport arrangement" : category.problemItems > 0 ? "Incomplete"
               : category.countedItems > 0 ? "Configured" : "Not configured";
           const hasAmount = category.countedItems > 0 && (r.areaHa !== null ? category.costFarm !== null : true);
-          const amount = !hasAmount ? "—" : mwk(r.areaHa !== null ? category.costFarm : category.costPerHa);
+          const amount = !hasAmount ? "—" : mwk(r.areaHa !== null
+            ? category.costFarm
+            : areaRequirementPerUnit(category.costPerHa, areaUnit));
           return <li className={`dashboard-category ${category.problemItems > 0 ? "has-problem" : ""}`} key={category.id}>
             <span className="dashboard-category-number" aria-hidden="true">{index + 1}</span>
             <span className="dashboard-category-name">{category.name}</span>

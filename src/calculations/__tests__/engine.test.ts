@@ -5,6 +5,7 @@ import {
 import { computeBudget } from "../grossMargin.ts";
 import { itemStatus } from "../validation.ts";
 import { COST_CATEGORIES, TRANSPORT_ITEM_ID } from "../../data/costCategories.ts";
+import { formatAreaUnitMessage, getAreaUnitText } from "../../lib/areaUnitText.ts";
 import type { BudgetInputs, CategoryId, CostItem } from "../../types/index.ts";
 
 const blankInputs = (): BudgetInputs => ({
@@ -46,6 +47,7 @@ describe("conversions (workbook Checks 6-18)", () => {
   it("2,500 g = 2.5 kg", () => expect(convertMass(2500, "g", "kg")).toBeCloseTo(2.5, 9));
   it("3 kg = 3,000 g", () => expect(convertMass(3, "kg", "g")).toBeCloseTo(3000, 9));
   it("1 ha = 2.47105 acres", () => expect(haToAcres(1)).toBeCloseTo(2.47105, 9));
+  it("1 acre converts to 1 / 2.47105 hectares", () => expect(convertUnits(1, "acre", "ha")).toBeCloseTo(1 / 2.47105, 9));
   it("10 acres = about 4.0469 ha", () => expect(areaToHa(10, "acres")).toBeCloseTo(4.0469, 4));
   it("converts per-ha requirements to per-acre without changing the physical quantity", () => {
     const perAcre = areaRequirementPerUnit(25, "acres");
@@ -55,6 +57,23 @@ describe("conversions (workbook Checks 6-18)", () => {
   it("keeps hectare requirements unchanged", () => {
     expect(areaRequirementPerUnit(25, "ha")).toBe(25);
     expect(areaRequirementToHa(25, "ha")).toBe(25);
+  });
+  it("round-trips an entered per-acre rate without rounding stored values", () => {
+    const storedPerHa = areaRequirementToHa(10, "acres");
+    expect(storedPerHa).toBe(24.7105);
+    expect(areaRequirementPerUnit(storedPerHa, "acres")).toBe(10);
+    expect(areaRequirementToHa(10, "ha")).toBe(10);
+  });
+  it.each([
+    ["acres", "Rate per acre", "Enter the quantity or rate per acre", "Enter the quantity or rate per acre.", "acre", "Acre"],
+    ["ha", "Rate per ha", "Enter the quantity or rate per ha", "Enter the quantity or rate per ha.", "ha", "Ha"],
+  ] as const)("provides consistent rate text and defaults for %s", (unit, label, hint, validation, defaultUnit, defaultLabel) => {
+    const text = getAreaUnitText(unit);
+    expect(text.rateLabel).toBe(label);
+    expect(text.inputHint).toBe(hint);
+    expect(text.validationMessage).toBe(validation);
+    expect(text.defaultRateUnit).toBe(defaultUnit);
+    expect(text.defaultRateUnitLabel).toBe(defaultLabel);
   });
   it("10 t/ha = 10,000 kg/ha", () => expect(yieldToKgHa(10, "tonnes per ha")).toBeCloseTo(10000, 9));
   it("MWK 2,500 per 50 kg bag = MWK 50 per kg", () => expect(priceToPerKg(2500, "MWK per 50 kg bag")).toBeCloseTo(50, 9));
@@ -120,6 +139,16 @@ describe("empty and incomplete budgets", () => {
     expect(r.items[unitMissing.id].status).toBe("select_unit");
     expect(r.status).toBe("in_progress");
   });
+  it.each([
+    ["acres", "Seed treatment: Enter the quantity or rate per acre."],
+    ["ha", "Seed treatment: Enter the quantity or rate per ha."],
+  ] as const)("uses the selected land unit in rate validation for %s", (areaUnit, expectedMessage) => {
+    const rateMissing = item("other", { name: "Seed treatment" });
+    const r = computeBudget({ ...blankInputs(), areaUnit }, [rateMissing]);
+    const issue = r.issues.find((entry) => entry.field === `item:${rateMissing.id}`);
+    expect(issue?.message).toBe("Seed treatment: Enter the quantity or rate.");
+    expect(formatAreaUnitMessage(issue!.message, areaUnit)).toBe(expectedMessage);
+  });
   it("incompatible units never enter the calculation", () => {
     const { inputs, items } = scenario();
     const bad = item("other", { rate: 3, rateUnit: "kg", price: 100, priceUnit: "l" });
@@ -183,6 +212,30 @@ describe("empty and incomplete budgets", () => {
     const base = computeBudget({ ...blankInputs(), area: 10, areaUnit: "ha", transportArrangement: "farm_gate" }, [seedHa]);
     const switched = computeBudget({ ...blankInputs(), area: 10 * 2.47105, areaUnit: "acres", transportArrangement: "farm_gate" }, [seedAcre]);
     expect(switched.tvcFarm).toBeCloseTo(base.tvcFarm!, 6);
+  });
+  it("acre-based rates and prices calculate correctly without changing whole-farm cost", () => {
+    const acres = 2;
+    const perAcre = item("tractor", {
+      name: "Land preparation",
+      rate: areaRequirementToHa(1, "acres"),
+      rateUnit: "acre",
+      price: 500,
+      priceUnit: "acre",
+    });
+    const perHectare = item("tractor", {
+      name: "Land preparation",
+      rate: 1,
+      rateUnit: "ha",
+      price: 500 * 2.47105,
+      priceUnit: "ha",
+    });
+
+    const acreResult = computeBudget({ ...blankInputs(), area: acres, areaUnit: "acres" }, [perAcre]);
+    const hectareResult = computeBudget({ ...blankInputs(), area: acres / 2.47105, areaUnit: "ha" }, [perHectare]);
+
+    expect(acreResult.items[perAcre.id].costPerHa).toBeCloseTo(500 * 2.47105, 6);
+    expect(acreResult.items[perAcre.id].costFarm).toBeCloseTo(1000, 6);
+    expect(acreResult.tvcFarm).toBeCloseTo(hectareResult.tvcFarm!, 6);
   });
 });
 

@@ -16,6 +16,7 @@ export const UNITS: readonly UnitDef[] = [
   { name: "ml", type: "volume", factor: 0.001, std: "l", label: "millilitre (ml)" },
   { name: "day", type: "labour", factor: 1, std: "day", label: "labour day" },
   { name: "ha", type: "area", factor: 1, std: "ha", label: "hectare (ha)" },
+  { name: "acre", type: "area", factor: 1 / ACRES_PER_HA, std: "ha", label: "acre" },
   { name: "mm", type: "water depth", factor: 1, std: "mm", label: "mm of water" },
   { name: "lump sum", type: "lump sum", factor: 1, std: "lump sum", label: "lump sum" },
 ];

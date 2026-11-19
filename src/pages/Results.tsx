@@ -1,18 +1,20 @@
 import { GM_NOTE } from "../components/common";
 import { areaRequirementPerUnit } from "../calculations/conversions";
+import { formatAreaUnitMessage, getAreaUnitText } from "../lib/areaUnitText.ts";
 import { useStore } from "../state/store";
 import { fmt, mwk, pct } from "../lib/format";
 import type { PageId } from "../App";
-import type { ScenarioResult } from "../types/index.ts";
+import type { AreaUnit, ScenarioResult } from "../types/index.ts";
 
 export function Missing({ go }: { go: (p: PageId) => void }) {
-  const { result: r } = useStore();
+  const { result: r, inputs } = useStore();
+  const areaUnit: AreaUnit = inputs.areaUnit ?? "ha";
   const todo = r.issues.filter((i) => i.severity !== "info");
   return <section className="results-missing" aria-labelledby="results-missing-heading">
     <p className="results-eyebrow">INCOMPLETE BUDGET</p>
     <h2 id="results-missing-heading">Complete the required inputs before reviewing results</h2>
     {todo.length > 0
-      ? <ul>{todo.map((i, k) => <li key={`${i.field}-${k}`}>{i.message}</li>)}</ul>
+      ? <ul>{todo.map((i, k) => <li key={`${i.field}-${k}`}>{formatAreaUnitMessage(i.message, areaUnit)}</li>)}</ul>
       : <p>No main scenario is available yet. Enter the required farm assumptions to calculate it.</p>}
     {r.alt === null && <p className="results-empty-note">Alternative scenario unavailable. It is optional and will appear when a valid alternative yield is entered.</p>}
     <button className="btn" onClick={() => go("farm")}>Go to Farm Setup</button>
@@ -23,15 +25,16 @@ export default function Results({ go }: { go: (p: PageId) => void }) {
   const { inputs, result: r } = useStore();
   const m = r.main;
   const a = r.alt;
-  const areaUnit = inputs.areaUnit ?? "ha";
-  const areaUnitLabel = areaUnit === "acres" ? "acre" : "ha";
-  const areaValue = inputs.area === null ? "Not entered" : `${fmt(inputs.area)} ${areaUnit === "acres" ? "acres" : "ha"}`;
+  const areaUnit: AreaUnit = inputs.areaUnit ?? "ha";
+  const areaUnitText = getAreaUnitText(areaUnit);
+  const areaUnitLabel = areaUnitText.unitName;
+  const areaValue = inputs.area === null ? "Not entered" : `${fmt(inputs.area)} ${areaUnitText.pluralUnitName}`;
   const countedItems = r.categories.reduce((total, category) => total + category.countedItems, 0);
   const hasCostTotals = r.status === "ready" || countedItems > 0;
   const hasIncompleteCosts = r.categories.some((category) => category.problemItems > 0);
   const neg = !!m && m.grossMarginPerHa < 0;
   const rows: [string, (s: ScenarioResult) => string][] = [
-    ["Expected production (kg/ha)", (s) => fmt(s.productionKgHa, 0)],
+    [`Expected production (kg/${areaUnitText.unitName})`, (s) => fmt(areaRequirementPerUnit(s.productionKgHa, areaUnit), 0)],
     ["Whole-farm production (tonnes)", (s) => fmt(s.productionTonnesFarm, 2)],
     ["Gross income, whole farm", (s) => mwk(s.grossIncomeFarm)],
     ["Total variable costs, whole farm", (s) => hasCostTotals ? mwk(s.tvcFarm) : "Pending — no complete cost items"],
@@ -49,8 +52,8 @@ export default function Results({ go }: { go: (p: PageId) => void }) {
   const outputScenario = m ?? a;
   const outputLabel = m ? "Main scenario output" : a ? "Alternative-only output" : "Expected output";
   const outputValue = outputScenario ? `${fmt(outputScenario.productionTonnesFarm, 2)} tonnes` : "Pending";
-  const selectedArea = inputs.area === null ? null : areaRequirementPerUnit(inputs.area, areaUnit);
-  const selectedAreaText = selectedArea === null ? areaValue : `${fmt(selectedArea)} ${areaUnit === "acres" ? "acres" : "ha"}`;
+  const selectedArea = inputs.area;
+  const selectedAreaText = selectedArea === null ? areaValue : `${fmt(selectedArea)} ${areaUnitText.pluralUnitName}`;
   const scenarioCostStatus = r.status === "ready"
     ? "Complete budget"
     : countedItems > 0
@@ -75,7 +78,8 @@ export default function Results({ go }: { go: (p: PageId) => void }) {
     {r.status !== "ready" && <div className="results-provisional" role="status">
       <strong>These figures are provisional.</strong>
       <span> Only complete cost entries are included in calculated costs; unresolved or incomplete entries can change the results.</span>
-      {r.issues.some((issue) => issue.severity !== "info") && <ul>{r.issues.filter((issue) => issue.severity !== "info").map((issue, index) => <li key={`${issue.field}-${index}`}>{issue.message}</li>)}</ul>}
+      {r.issues.some((issue) => issue.severity !== "info") && <ul>{r.issues.filter((issue) => issue.severity !== "info").map((issue, index) =>
+        <li key={`${issue.field}-${index}`}>{formatAreaUnitMessage(issue.message, areaUnit)}</li>)}</ul>}
     </div>}
 
     {m ? <section className={`results-main-financial ${neg ? "is-negative" : ""}`} aria-labelledby="main-gross-margin-heading">
@@ -116,10 +120,10 @@ export default function Results({ go }: { go: (p: PageId) => void }) {
         <div><p className="results-eyebrow">INPUT ASSUMPTIONS</p><h2 id="results-assumptions-heading">Main scenario assumptions</h2></div>
       </div>
       <div className="results-assumption-grid">
-        <div><span>Farm area</span><strong>{areaValue}</strong><small>{selectedArea !== null ? `${fmt(r.areaHa)} ha · ${fmt(r.areaAcres)} acres equivalent` : "Area equivalent unavailable"}</small></div>
-        <div><span>Main expected yield</span><strong>{m ? `${fmt(m.yieldKgHa, 0)} kg/ha` : "Not entered"}</strong><small>{inputs.yieldMainUnit ?? "Yield unit not selected"}</small></div>
+        <div><span>Farm area</span><strong>{areaValue}</strong><small>{selectedArea !== null ? `${fmt(areaUnit === "ha" ? r.areaAcres : r.areaHa)} ${areaUnitText.equivalentUnitName} equivalent` : "Area equivalent unavailable"}</small></div>
+        <div><span>Main expected yield</span><strong>{m ? `${fmt(areaRequirementPerUnit(m.yieldKgHa, areaUnit), 0)} kg/${areaUnitLabel}` : "Not entered"}</strong><small>{inputs.yieldMainUnit ?? "Yield unit not selected"}</small></div>
         <div><span>Expected selling price</span><strong>{r.pricePerKg > 0 ? `MWK ${fmt(r.pricePerKg, 2)} /kg` : "Not entered"}</strong><small>{inputs.priceUnit ?? "Price unit not selected"}</small></div>
-        <div><span>Expected production</span><strong>{m ? `${fmt(m.productionKgHa, 0)} kg/ha` : "Not entered"}</strong><small>{m && m.productionKgFarm !== null ? `${fmt(m.productionKgFarm, 0)} kg whole farm` : "Whole-farm production unavailable"}</small></div>
+        <div><span>Expected production</span><strong>{m ? `${fmt(areaRequirementPerUnit(m.productionKgHa, areaUnit), 0)} kg/${areaUnitLabel}` : "Not entered"}</strong><small>{m && m.productionKgFarm !== null ? `${fmt(m.productionKgFarm, 0)} kg whole farm` : "Whole-farm production unavailable"}</small></div>
       </div>
     </section>
 
@@ -131,7 +135,7 @@ export default function Results({ go }: { go: (p: PageId) => void }) {
         {!a ? <p className="results-empty-note">Alternative scenario unavailable. It is optional; enter an alternative yield to see the comparison.</p> : <>
           <div className="table-scroll" role="region" aria-label="Main and alternative scenario comparison" tabIndex={0}>
             <table className="results-comparison-table">
-              <thead><tr><th scope="col">Financial measure</th><th scope="col">Main{m ? ` (${fmt(m.yieldKgHa, 0)} kg/ha)` : " (not entered)"}</th><th scope="col">Alternative ({fmt(a.yieldKgHa, 0)} kg/ha)</th></tr></thead>
+              <thead><tr><th scope="col">Financial measure</th><th scope="col">Main{m ? ` (${fmt(areaRequirementPerUnit(m.yieldKgHa, areaUnit), 0)} kg/${areaUnitLabel})` : " (not entered)"}</th><th scope="col">Alternative ({fmt(areaRequirementPerUnit(a.yieldKgHa, areaUnit), 0)} kg/${areaUnitLabel})</th></tr></thead>
               <tbody>{rows.map(([label, format]) => <tr key={label}><th scope="row">{label}</th><td>{colM(format)}</td><td>{colA(format)}</td></tr>)}</tbody>
             </table>
           </div>

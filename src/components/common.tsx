@@ -18,9 +18,9 @@ export const Field = ({ label, error, children, htmlFor, errorId }: { label: str
 export const Kpi = ({ label, value, sub }: { label: string; value: string; sub?: ReactNode }) =>
   <div className="card kpi kpi-card"><div className="l">{label}</div><div className="v">{value}</div>{sub ? <div className="s">{sub}</div> : null}</div>;
 
-export function StatusChip({ status }: { status: ItemStatus }) {
+export function StatusChip({ status, message }: { status: ItemStatus; message?: string }) {
   const cls = status === "ok" ? "c-ok" : status === "unused" || status === "farm_gate" ? "c-n" : isErrorStatus(status) ? "c-err" : "c-warn";
-  return <span className={`chip status-chip ${cls}`}>{STATUS_MESSAGE[status]}</span>;
+  return <span className={`chip status-chip ${cls}`}>{message ?? STATUS_MESSAGE[status]}</span>;
 }
 export const StatusBadge = ({ s }: { s: "not_started" | "in_progress" | "ready" }) =>
   <span className={`chip status-badge ${s === "ready" ? "c-ok" : s === "in_progress" ? "c-warn" : "c-n"}`}>{s === "ready" ? "Ready for review" : s === "in_progress" ? "In progress" : "Not started"}</span>;

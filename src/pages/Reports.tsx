@@ -4,21 +4,22 @@ import { STATUS_MESSAGE } from "../calculations/validation.ts";
 import { useStore } from "../state/store";
 import { fmt, mwk, pct } from "../lib/format";
 import { areaRequirementPerUnit } from "../calculations/conversions.ts";
+import { formatAreaUnitMessage, getAreaUnitText } from "../lib/areaUnitText.ts";
 import type { PageId } from "../App";
-import type { ScenarioResult } from "../types/index.ts";
+import type { AreaUnit, ScenarioResult } from "../types/index.ts";
 import { buildReportModel, type ReportCostItem } from "./reportModel.ts";
 
 const farmMoney = (value: number | null) =>
   value === null ? "Not available until a valid farm area is entered." : mwk(value);
 const money = (value: number | null) => value === null ? "Not available until a valid farm area is entered." : mwk(value);
 
-function transportCostText(value: number | null, farmValue: number | null, areaUnit: "ha" | "acres") {
+function transportCostText(value: number | null, farmValue: number | null, areaUnit: AreaUnit) {
   if (value === null) return "Not available while transport selection or pricing is unresolved; scenario totals exclude any transport cost.";
-  const areaLabel = areaUnit === "acres" ? "acre" : "ha";
+  const areaLabel = getAreaUnitText(areaUnit).unitName;
   return `${mwk(areaRequirementPerUnit(value, areaUnit))} per ${areaLabel}; ${farmValue === null ? "whole-farm cost unavailable until farm area is valid" : `${mwk(farmValue)} whole farm`}`;
 }
 
-function standardQuantity(row: ReportCostItem, areaUnit: "ha" | "acres") {
+function standardQuantity(row: ReportCostItem, areaUnit: AreaUnit) {
   const { item, result } = row;
   if (item.yieldLinked && result.ratePerHaStd <= 0) return "Not available until a valid main yield is entered.";
   if (!item.yieldLinked && (item.rate === null || item.rate <= 0)) return "Not available until a positive rate is entered.";
@@ -26,31 +27,32 @@ function standardQuantity(row: ReportCostItem, areaUnit: "ha" | "acres") {
   const farmQuantity = result.farmQtyStd === null
     ? "whole-farm quantity unavailable until farm area is valid"
     : `${fmt(result.farmQtyStd, 2)} ${result.stdUnit} whole farm`;
-  const areaLabel = areaUnit === "acres" ? "acre" : "ha";
+  const areaLabel = getAreaUnitText(areaUnit).unitName;
   return `${fmt(areaRequirementPerUnit(result.ratePerHaStd, areaUnit), 2)} ${result.stdUnit}/${areaLabel}; ${farmQuantity}`;
 }
 
-function itemRate(row: ReportCostItem, areaUnit: "ha" | "acres") {
+function itemRate(row: ReportCostItem, areaUnit: AreaUnit) {
   if (row.item.yieldLinked) {
     return row.result.ratePerHaStd <= 0 ? "Not available" : `${fmt(areaRequirementPerUnit(row.result.ratePerHaStd, areaUnit), 2)} kg`;
   }
   return row.item.rate === null ? "Not entered" : fmt(areaRequirementPerUnit(row.item.rate, areaUnit), 2);
 }
 
-function itemIssue(row: ReportCostItem, areaUnit: "ha" | "acres") {
+function itemIssue(row: ReportCostItem, areaUnit: AreaUnit) {
   if (row.item.yieldLinked && row.result.ratePerHaStd <= 0) return "A valid main expected yield is required.";
+  if (row.result.status === "enter_rate") return getAreaUnitText(areaUnit).validationMessage;
   const message = STATUS_MESSAGE[row.result.status];
-  return `${areaUnit === "acres" ? message.replace("per hectare", "per acre") : message}.`;
+  return `${message}.`;
 }
 
 function scenarioRows(
   scenario: ScenarioResult,
   transportCost: number | null,
   transportFarm: number | null,
-  areaUnit: "ha" | "acres",
+  areaUnit: AreaUnit,
   hasCostTotals: boolean,
 ): [string, string][] {
-  const areaLabel = areaUnit === "acres" ? "acre" : "ha";
+  const areaLabel = getAreaUnitText(areaUnit).unitName;
   return [
     ["Expected yield", `${fmt(areaRequirementPerUnit(scenario.yieldKgHa, areaUnit), 0)} kg/${areaLabel}`],
     ["Expected whole-farm production", scenario.productionKgFarm === null
@@ -86,8 +88,9 @@ function ReportStatus({ ready }: { ready: boolean }) {
 
 export default function Reports({ go }: { go: (p: PageId) => void }) {
   const { inputs, items, result } = useStore();
-  const areaUnit = inputs.areaUnit ?? "ha";
-  const areaRequirementLabel = areaUnit === "acres" ? "acre" : "ha";
+  const areaUnit: AreaUnit = inputs.areaUnit ?? "ha";
+  const areaUnitText = getAreaUnitText(areaUnit);
+  const areaRequirementLabel = areaUnitText.unitName;
   const report = buildReportModel(inputs, result, items);
   const main = report.main;
   const alternative = report.alternative;
@@ -108,7 +111,7 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
     : report.transport.state === "included"
       ? "Transport required — valid transport pricing is entered and included."
       : report.transport.state === "unresolved"
-        ? `Transport required — cost is not included. ${transportItem ? STATUS_MESSAGE[transportItem.result.status] : "Transport pricing is incomplete"}.`
+        ? `Transport required — cost is not included. ${transportItem ? itemIssue(transportItem, areaUnit) : "Transport pricing is incomplete"}.`
         : "Transport arrangement not selected — transport cost remains unresolved.";
 
   const transportMainCost = report.transport.state === "farm_gate"
@@ -119,7 +122,7 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
 
   const areaText = inputs.area === null ? "Not entered"
     : inputs.areaUnit === null ? `${fmt(inputs.area, 2)} (unit not selected)`
-      : `${fmt(inputs.area, 2)} ${inputs.areaUnit} (equivalent ${fmt(inputs.areaUnit === "ha" ? result.areaAcres : result.areaHa, 2)} ${inputs.areaUnit === "ha" ? "acres" : "ha"})`;
+      : `${fmt(inputs.area, 2)} ${areaUnitText.pluralUnitName} (equivalent ${fmt(areaUnit === "ha" ? result.areaAcres : result.areaHa, 2)} ${areaUnitText.equivalentUnitName})`;
   const mainYieldText = inputs.yieldMain === null ? "Not entered"
     : `${fmt(inputs.yieldMain, 2)} ${inputs.yieldMainUnit ?? "(unit not selected)"}` +
       (result.yieldMainKgHa > 0 ? ` (${fmt(areaRequirementPerUnit(result.yieldMainKgHa, areaUnit), 0)} kg/${areaRequirementLabel})` : "");
@@ -192,7 +195,9 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
         <h2>DRAFT — Incomplete budget</h2>
         <p>This is not a completed financial report. Resolve the following before relying on these figures:</p>
         {report.issues.length > 0
-          ? <ul>{report.issues.map((issue, index) => <li key={`${issue.field}-${index}`}>{issue.message}</li>)}</ul>
+          ? <ul>{report.issues.map((issue, index) => <li key={`${issue.field}-${index}`}>
+            {formatAreaUnitMessage(issue.message, areaUnit)}
+          </li>)}</ul>
           : <p>Complete the required farm, transport, and cost details before treating this report as final.</p>}
         {!main && alternative && <p><b>Main scenario unavailable.</b> Only the alternative-yield scenario is shown; no main-scenario figures have been estimated.</p>}
         <button className="btn sec noprint" onClick={() => go("farm")}>Review Farm Setup</button>

@@ -1,5 +1,5 @@
 export type UnitType = "mass" | "volume" | "labour" | "area" | "water depth" | "lump sum";
-export type UnitName = "kg" | "g" | "tonne" | "50 kg bag" | "25 kg bag" | "l" | "ml" | "day" | "ha" | "mm" | "lump sum";
+export type UnitName = "kg" | "g" | "tonne" | "50 kg bag" | "25 kg bag" | "l" | "ml" | "day" | "ha" | "acre" | "mm" | "lump sum";
 export type AreaUnit = "ha" | "acres";
 export type YieldUnit = "kg per ha" | "tonnes per ha";
 export type PriceUnit = "MWK per kg" | "MWK per tonne" | "MWK per 50 kg bag";

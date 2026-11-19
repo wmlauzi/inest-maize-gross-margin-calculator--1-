@@ -4,25 +4,31 @@ import { useStore } from "../state/store";
 import { COST_CATEGORIES } from "../data/costCategories.ts";
 import { UNITS } from "../data/units.ts";
 import { areaRequirementPerUnit, areaRequirementToHa, getUnit } from "../calculations/conversions.ts";
+import { getAreaUnitText } from "../lib/areaUnitText.ts";
 import { fmt, mwk, pct } from "../lib/format";
-import type { CostItem, TransportArrangement, UnitName } from "../types/index.ts";
+import type { AreaUnit, CostItem, TransportArrangement, UnitName } from "../types/index.ts";
 
-const UnitSelect = ({ value, onChange, only, label, invalid, errorId }: {
+const UnitSelect = ({ value, onChange, only, label, invalid, errorId, defaultRateUnit, defaultRateUnitLabel }: {
   value: UnitName | null; onChange: (u: UnitName | null) => void; only?: string; label: string; invalid?: boolean; errorId?: string;
+  defaultRateUnit?: UnitName; defaultRateUnitLabel?: string;
 }) =>
   <select aria-label={label} aria-invalid={invalid} aria-describedby={errorId} value={value ?? ""} onChange={(e) => onChange((e.target.value || null) as UnitName | null)}>
-    <option value="">Unit…</option>{UNITS.filter((u) => !only || u.type === only).map((u) => <option key={u.name} value={u.name}>{u.label}</option>)}</select>;
+    <option value="">Unit…</option>{UNITS.filter((u) => !only || u.type === only).map((u) =>
+      <option key={u.name} value={u.name}>{u.name === defaultRateUnit ? defaultRateUnitLabel ?? u.label : u.label}</option>)}</select>;
 
 function ItemForm({ item }: { item: CostItem }) {
   const { result: r, dispatch, inputs } = useStore();
   const res = r.items[item.id]; const up = (patch: Partial<CostItem>) => dispatch({ t: "update", id: item.id, patch });
-  const linked = !!item.yieldLinked; const rt = getUnit(linked ? "kg" : item.rateUnit)?.type;
-  const std = res.stdUnit;
+  const linked = !!item.yieldLinked;
   const arrangement = inputs.transportArrangement;
-  const areaUnit = inputs.areaUnit ?? "ha";
-  const areaRequirementLabel = areaUnit === "acres" ? "acre" : "ha";
+  const areaUnit: AreaUnit = inputs.areaUnit ?? "ha";
+  const areaUnitText = getAreaUnitText(areaUnit);
+  const effectiveRateUnit = item.rateUnit ?? areaUnitText.defaultRateUnit;
+  const effectivePriceUnit = item.priceUnit ?? effectiveRateUnit;
+  const rt = getUnit(linked ? "kg" : effectiveRateUnit)?.type;
+  const std = res.stdUnit;
   const areaRequirementValue = (valuePerHa: number) => areaRequirementPerUnit(valuePerHa, areaUnit);
-  const rateIssue = res.status === "enter_rate" ? `Enter the quantity or rate per ${areaRequirementLabel}.`
+  const rateIssue = res.status === "enter_rate" ? areaUnitText.validationMessage
     : res.status === "select_unit" ? "Choose a unit for this rate."
     : res.status === "invalid_value" && item.rate !== null && item.rate < 0 ? "Rate cannot be negative."
     : res.status === "invalid_unit" && !getUnit(item.rateUnit) ? "Choose a valid rate unit."
@@ -38,7 +44,8 @@ function ItemForm({ item }: { item: CostItem }) {
   const setArrangement = (value: Exclude<TransportArrangement, null>) =>
     dispatch({ t: "input", patch: { transportArrangement: value } });
   return <div className="item cost-item">
-    <div className="cost-item-header"><StatusChip status={res.status} />
+    <div className="cost-item-header"><StatusChip status={res.status}
+      message={res.status === "enter_rate" ? areaUnitText.validationMessage : undefined} />
       {item.userAdded && <button className="btn del" onClick={() => { if (confirm("Remove this cost item?")) dispatch({ t: "remove", id: item.id }); }}>Remove item</button>}</div>
     {linked && <div className="field cost-transport-arrangement" role="radiogroup" aria-label="Transport arrangement" aria-required="true"
       aria-invalid={arrangement === null} aria-describedby={arrangement === null ? `transport-arrangement-error-${item.id}` : undefined}>
@@ -55,32 +62,46 @@ function ItemForm({ item }: { item: CostItem }) {
       </label>
       {arrangement === null && <p id={`transport-arrangement-error-${item.id}`} className="err" role="alert">Select a transport arrangement to complete the budget.</p>}
       {arrangement === "farm_gate" && <p className="muted" role="status">No transport cost has been included in this budget.</p>}
-      {arrangement === "transport_required" && <p className="muted">Transport rate follows the main expected yield per {areaRequirementLabel}. Enter a price in a compatible mass unit.</p>}
+      {arrangement === "transport_required" && <p className="muted">Transport rate follows the main expected yield per {areaUnitText.unitName}. Enter a price in a compatible mass unit.</p>}
     </div>}
     <div className="fgrid cost-fields">
       <div className="full"><Field label="Item name" htmlFor={`item-name-${item.id}`}><input id={`item-name-${item.id}`} value={item.name} onChange={(e) => up({ name: e.target.value })} readOnly={linked} placeholder="e.g. Basal fertiliser" /></Field></div>
       {(!linked || arrangement !== "farm_gate") && <>
-        <Field label={linked ? `Rate per ${areaRequirementLabel} (= main expected yield)` : `Rate per ${areaRequirementLabel}`} htmlFor={`item-rate-${item.id}`}><div className="row">
+        <Field label={linked ? `${areaUnitText.rateLabel} (= main expected yield)` : areaUnitText.rateLabel} htmlFor={`item-rate-${item.id}`}><div className="row">
             <Num id={`item-rate-${item.id}`} value={linked
               ? (r.yieldMainKgHa > 0 ? areaRequirementValue(r.yieldMainKgHa) : null)
               : (item.rate === null ? null : areaRequirementValue(item.rate))}
-              readOnly={linked} onChange={(v) => up({ rate: v === null ? null : areaRequirementToHa(v, areaUnit) })}
+              readOnly={linked} onChange={(v) => up({
+                rate: v === null ? null : areaRequirementToHa(v, areaUnit),
+                ...(v !== null && !item.rateUnit ? { rateUnit: areaUnitText.defaultRateUnit } : {}),
+                ...(v !== null && !item.priceUnit ? { priceUnit: effectiveRateUnit } : {}),
+              })}
             aria-invalid={!!rateIssue} aria-describedby={rateIssue ? `item-rate-error-${item.id}` : undefined} />
-          {linked ? <select disabled aria-label="Rate unit"><option>kg</option></select> : <UnitSelect label="Rate unit" value={item.rateUnit} invalid={!!rateIssue}
-            errorId={rateIssue ? `item-rate-error-${item.id}` : undefined} onChange={(u) => { const t = getUnit(u)?.type; const pt = getUnit(item.priceUnit)?.type; up({ rateUnit: u, priceUnit: !item.priceUnit || (t && pt && t !== pt) ? u : item.priceUnit }); }} />}</div>
+          {linked ? <select disabled aria-label="Rate unit"><option>kg</option></select> : <UnitSelect label="Rate unit" value={effectiveRateUnit} invalid={!!rateIssue}
+            errorId={rateIssue ? `item-rate-error-${item.id}` : undefined} defaultRateUnit={areaUnitText.defaultRateUnit}
+            defaultRateUnitLabel={areaUnitText.defaultRateUnitLabel}
+            onChange={(u) => { const t = getUnit(u)?.type; const pt = getUnit(item.priceUnit)?.type; up({ rateUnit: u, priceUnit: !item.priceUnit || (t && pt && t !== pt) ? u : item.priceUnit }); }} />}</div>
+          {!linked && <small className="muted">{areaUnitText.inputHint}</small>}
           {rateIssue && <p id={`item-rate-error-${item.id}`} className="err" role="alert">{rateIssue}</p>}</Field>
-        <Field label="Unit price (MWK)" htmlFor={`item-price-${item.id}`}><div className="row"><Num id={`item-price-${item.id}`} value={item.price} onChange={(v) => up({ price: v })}
+        <Field label={`Unit price (MWK per ${effectivePriceUnit})`} htmlFor={`item-price-${item.id}`}><div className="row"><Num id={`item-price-${item.id}`} value={item.price} onChange={(v) => up({
+            price: v,
+            ...(!item.rateUnit ? { rateUnit: effectiveRateUnit } : {}),
+            ...(!item.priceUnit ? { priceUnit: effectivePriceUnit } : {}),
+          })}
             aria-invalid={!!priceIssue} aria-describedby={priceIssue ? `item-price-error-${item.id}` : undefined} />
-          <UnitSelect label="Price is per" value={item.priceUnit} only={rt} invalid={!!priceIssue} errorId={priceIssue ? `item-price-error-${item.id}` : undefined} onChange={(u) => up({ priceUnit: u })} /></div>
+          <UnitSelect label="Price is per" value={effectivePriceUnit} only={rt} invalid={!!priceIssue}
+            errorId={priceIssue ? `item-price-error-${item.id}` : undefined}
+            defaultRateUnit={areaUnitText.defaultRateUnit} defaultRateUnitLabel={areaUnitText.defaultRateUnitLabel}
+            onChange={(u) => up({ priceUnit: u })} /></div>
           {priceIssue && <p id={`item-price-error-${item.id}`} className="err" role="alert">{priceIssue}</p>}</Field>
       </>}
       <Field label="Description (optional)" htmlFor={`item-description-${item.id}`}><input id={`item-description-${item.id}`} value={item.description} onChange={(e) => up({ description: e.target.value })} /></Field>
       <Field label="Notes (optional)" htmlFor={`item-notes-${item.id}`}><input id={`item-notes-${item.id}`} value={item.notes} onChange={(e) => up({ notes: e.target.value })} /></Field>
     </div>
     <div className="calc cost-calculations" aria-label="Calculated cost details">
-      <span>Standard rate / {areaRequirementLabel}: <b>{res.ratePerHaStd ? `${fmt(areaRequirementValue(res.ratePerHaStd), 3)} ${std}` : "–"}</b></span>
+      <span>Standard rate / {areaUnitText.unitName}: <b>{res.ratePerHaStd ? `${fmt(areaRequirementValue(res.ratePerHaStd), 3)} ${std}` : "–"}</b></span>
       <span>Price/{std ?? "unit"}: <b>{res.counted ? fmt(res.pricePerStdUnit, 4) : "–"}</b></span>
-      <span>Cost per {areaRequirementLabel}: <b>{res.counted ? mwk(areaRequirementValue(res.costPerHa)) : "–"}</b></span>
+      <span>Cost per {areaUnitText.unitName}: <b>{res.counted ? mwk(areaRequirementValue(res.costPerHa)) : "–"}</b></span>
       <span>Whole-farm cost: <b>{res.counted ? mwk(res.costFarm) : "–"}</b></span>
       <span>Share of total: <b>{res.counted ? pct(res.pctOfTotal) : "–"}</b></span>
       {res.farmTonnes !== null && <span>Approx. whole-farm production: <b>{fmt(res.farmTonnes, 3)} t</b> · <b>{fmt(res.farmBags50, 1)}</b> × 50 kg bags</span>}
@@ -91,8 +112,8 @@ function ItemForm({ item }: { item: CostItem }) {
 
 export default function ProductionCosts() {
   const { items, result: r, dispatch, inputs } = useStore();
-  const areaUnit = inputs.areaUnit ?? "ha";
-  const areaRequirementLabel = areaUnit === "acres" ? "acre" : "ha";
+  const areaUnit: AreaUnit = inputs.areaUnit ?? "ha";
+  const areaUnitText = getAreaUnitText(areaUnit);
   const areaRequirementValue = (valuePerHa: number) => areaRequirementPerUnit(valuePerHa, areaUnit);
   const countedCostItems = r.categories.reduce((total, category) => total + category.countedItems, 0);
   const problemCostItems = r.categories.reduce((total, category) => total + category.problemItems, 0);
@@ -111,7 +132,7 @@ export default function ProductionCosts() {
     </header>
     {inputs.transportArrangement === null && <div className="note" role="alert">Select a transport arrangement in the Transport category before completing this budget.</div>}
     <section className="cost-summary" aria-label="Variable cost summary">
-      <Kpi label={`Total variable costs per ${areaRequirementLabel}`}
+      <Kpi label={`Total variable costs per ${areaUnitText.unitName}`}
         value={canShowCostTotals ? mwk(areaRequirementValue(r.tvcPerHa)) : "Pending"}
         sub={r.status === "ready" ? undefined : canShowCostTotals
           ? <span className="cost-total-status is-partial">{partialTotalMessage}</span>
@@ -136,7 +157,7 @@ export default function ProductionCosts() {
           <span className="cost-category-meta">
             <span className={`chip cost-category-status ${stateClass}`}>{stateLabel}</span>
             <span className="cost-category-count">{cr.itemCount} item{cr.itemCount === 1 ? "" : "s"}{cr.problemItems > 0 ? ` · ${cr.problemItems} need attention` : ""}</span>
-            <strong className="cost-category-total">{cr.countedItems ? `${mwk(areaRequirementValue(cr.costPerHa))}/${areaRequirementLabel}` : "–"}</strong>
+            <strong className="cost-category-total">{cr.countedItems ? `${mwk(areaRequirementValue(cr.costPerHa))}/${areaUnitText.unitName}` : "–"}</strong>
           </span>
         </summary>
         <div className="body cost-category-body">{mine.map((i) => <ItemForm key={i.id} item={i} />)}
