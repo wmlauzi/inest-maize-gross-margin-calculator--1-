@@ -2,7 +2,7 @@ import logo from "../assets/inest-logo.png";
 import { GM_NOTE } from "../components/common";
 import { STATUS_MESSAGE } from "../calculations/validation.ts";
 import { useStore } from "../state/store";
-import { fmt, mwk } from "../lib/format";
+import { fmt, mwk, pct } from "../lib/format";
 import { areaRequirementPerUnit } from "../calculations/conversions.ts";
 import type { PageId } from "../App";
 import type { ScenarioResult } from "../types/index.ts";
@@ -48,6 +48,7 @@ function scenarioRows(
   transportCost: number | null,
   transportFarm: number | null,
   areaUnit: "ha" | "acres",
+  hasCostTotals: boolean,
 ): [string, string][] {
   const areaLabel = areaUnit === "acres" ? "acre" : "ha";
   return [
@@ -58,8 +59,12 @@ function scenarioRows(
     [`Expected revenue per ${areaLabel}`, mwk(areaRequirementPerUnit(scenario.grossIncomePerHa, areaUnit))],
     ["Expected revenue, whole farm", farmMoney(scenario.grossIncomeFarm)],
     [`Transport cost per ${areaLabel} / whole farm`, transportCostText(transportCost, transportFarm, areaUnit)],
-    [`Total variable costs per ${areaLabel}`, mwk(areaRequirementPerUnit(scenario.tvcPerHa, areaUnit))],
-    ["Total variable costs, whole farm", farmMoney(scenario.tvcFarm)],
+    [`Total variable costs per ${areaLabel}`, hasCostTotals
+      ? mwk(areaRequirementPerUnit(scenario.tvcPerHa, areaUnit))
+      : "Pending — no complete cost items are available."],
+    ["Total variable costs, whole farm", hasCostTotals
+      ? farmMoney(scenario.tvcFarm)
+      : "Pending — no complete cost items are available."],
     [`Gross margin per ${areaLabel}`, mwk(areaRequirementPerUnit(scenario.grossMarginPerHa, areaUnit))],
     ["Gross margin, whole farm", farmMoney(scenario.grossMarginFarm)],
   ];
@@ -87,6 +92,16 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
   const main = report.main;
   const alternative = report.alternative;
   const transportItem = report.transport.item;
+  const countedCostItems = result.categories.reduce((total, category) => total + category.countedItems, 0);
+  const hasCostTotals = report.ready || countedCostItems > 0;
+  const partialCostTotals = !report.ready && countedCostItems > 0;
+  const generatedDate = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const totalCostPerArea = hasCostTotals
+    ? mwk(areaRequirementPerUnit(result.tvcPerHa, areaUnit))
+    : "Pending — no complete cost items are available.";
+  const totalCostWholeFarm = hasCostTotals
+    ? farmMoney(result.tvcFarm)
+    : "Pending — no complete cost items are available.";
 
   const transportAssumption = report.transport.state === "farm_gate"
     ? "Farm-gate sale selected — no transport cost is included."
@@ -124,13 +139,15 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
     ["Selling price (selected unit)", sellingPriceText],
     ["Transport arrangement", transportAssumption],
     ["Main-scenario transport cost", transportMainCost],
+    ["Crop", "Maize"],
+    ["Report generated", generatedDate],
     ["Expected whole-farm production", main?.productionKgFarm === null || !main
       ? "Not available — a valid main scenario and farm area are required."
       : `${fmt(main.productionKgFarm, 0)} kg · ${fmt(main.productionTonnesFarm, 2)} t · ${fmt(main.productionBags50Farm, 0)} × 50 kg bags`],
     [`Expected revenue per ${areaRequirementLabel}`, main ? mwk(areaRequirementPerUnit(main.grossIncomePerHa, areaUnit)) : "Not available — main scenario inputs are incomplete."],
     ["Expected revenue, whole farm", main ? farmMoney(main.grossIncomeFarm) : "Not available — main scenario inputs are incomplete."],
-    [`Total variable costs per ${areaRequirementLabel}`, mwk(areaRequirementPerUnit(result.tvcPerHa, areaUnit))],
-    ["Total variable costs, whole farm", farmMoney(result.tvcFarm)],
+    [`Total variable costs per ${areaRequirementLabel}`, totalCostPerArea],
+    ["Total variable costs, whole farm", totalCostWholeFarm],
     [`Gross margin per ${areaRequirementLabel}`, main ? mwk(areaRequirementPerUnit(main.grossMarginPerHa, areaUnit)) : "Not available — main scenario inputs are incomplete."],
     ["Gross margin, whole farm", main ? farmMoney(main.grossMarginFarm) : "Not available — main scenario inputs are incomplete."],
     ["Break-even selling price", main?.breakEvenPerKg === null || !main
@@ -144,21 +161,32 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
   return <>
     <div className="noprint report-toolbar">
       <div><h1>Reports</h1><p className="lead">Review, print, or save this budget as a PDF.</p></div>
-      <button className="btn full-m" onClick={() => window.print()}>Print / Save as PDF</button>
+      <button className="btn full-m report-print-button" onClick={() => window.print()}>
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z" /></svg>
+        Print / Save as PDF
+      </button>
     </div>
     <article className="report report-document">
       <header className="report-brand">
-        <img src={logo} alt="iNest Agro" />
-        <div><strong>iNest Agro</strong><p>Smarter Farming. Better Decisions.</p></div>
-        <ReportStatus ready={report.ready} />
+        <div className="report-brand-identity">
+          <img src={logo} alt="iNest Agro" />
+          <div><strong>iNest Agro</strong><p>Smarter Farming. Better Decisions.</p></div>
+        </div>
+        <div className="report-brand-meta"><span>Currency · MWK</span><ReportStatus ready={report.ready} /></div>
       </header>
       <div className="report-heading">
-        <p>MAIZE PRODUCTION BUDGET</p>
-        <h2 className="report-title">Maize Gross Margin Budget</h2>
-        <div className="report-heading-meta">
-          <span>{inputs.description || "Enterprise not entered"}</span>
-          <span>{inputs.season || "Season not entered"}</span>
+        <div className="report-heading-copy">
+          <p>MAIZE PRODUCTION BUDGET</p>
+          <h2 className="report-title">Maize Gross Margin Budget</h2>
+          <span>Financial planning report from the current farm budget.</span>
         </div>
+        <dl className="report-metadata">
+          <div><dt>Enterprise</dt><dd>{inputs.description || "Not entered"}</dd></div>
+          <div><dt>Season</dt><dd>{inputs.season || "Not entered"}</dd></div>
+          <div><dt>Crop</dt><dd>Maize</dd></div>
+          <div><dt>Farm area</dt><dd>{areaText}</dd></div>
+          <div><dt>Generated</dt><dd>{generatedDate}</dd></div>
+        </dl>
       </div>
       {!report.ready && <section className="report-draft" aria-label="Incomplete budget notice">
         <h2>DRAFT — Incomplete budget</h2>
@@ -185,19 +213,34 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
           </div>
           <div className="report-financial-grid">
             <div><span>Expected revenue / {areaRequirementLabel}</span><strong>{main ? mwk(areaRequirementPerUnit(main.grossIncomePerHa, areaUnit)) : "Not available"}</strong></div>
-            <div><span>Total variable costs / {areaRequirementLabel}</span><strong>{mwk(areaRequirementPerUnit(result.tvcPerHa, areaUnit))}</strong></div>
-            <div><span>Break-even price</span><strong>{main ? `${mwk(main.breakEvenPerKg, 2)}/kg` : "Not available"}</strong></div>
-            <div><span>Return per MWK of variable costs</span><strong>{main?.returnPerMwk == null ? "n/a" : fmt(main.returnPerMwk, 2)}</strong></div>
+            <div><span>Total variable costs / {areaRequirementLabel}</span><strong>{totalCostPerArea}</strong></div>
+            <div><span>Break-even price</span><strong>{main && hasCostTotals ? `${mwk(main.breakEvenPerKg, 2)}/kg` : "Pending"}</strong></div>
+            <div><span>Return per MWK of variable costs</span><strong>{!main || !hasCostTotals ? "Pending" : main.returnPerMwk === null ? "Not calculable when variable costs are zero." : fmt(main.returnPerMwk, 2)}</strong></div>
           </div>
         </div>
       </section>
 
       <section className="report-section">
         <div className="report-section-heading"><p>03</p><h2>Detailed production costs</h2></div>
-        <p className="report-explainer">Only started cost items are listed. Incomplete items are not included in the calculated cost totals.</p>
+        <p className="report-explainer">
+          Only started cost items are listed. Incomplete items are not included in calculated totals.
+          {partialCostTotals && " Displayed cost totals are partial because the budget is incomplete."}
+        </p>
         {report.categories.map((category, index) => <section className="report-category" key={category.id}>
           <h3><span>{String(index + 1).padStart(2, "0")}</span>{category.name}</h3>
-          <p className="report-category-total">Category total: {mwk(areaRequirementPerUnit(category.costPerHa, areaUnit))} per {areaRequirementLabel} · {category.costFarm === null ? "whole-farm total not available until farm area is valid" : `${mwk(category.costFarm)} whole farm`}</p>
+          {(() => {
+            const countedInCategory = category.items.filter((row) => row.result.counted).length;
+            const incompleteInCategory = category.items.length - countedInCategory;
+            if (report.ready || countedInCategory > 0) {
+              return <p className="report-category-total">
+                {report.ready ? "Category total" : "Partial category total"}: {mwk(areaRequirementPerUnit(category.costPerHa, areaUnit))} per {areaRequirementLabel}
+                {" · "}{category.costFarm === null ? "whole-farm total not available until farm area is valid" : `${mwk(category.costFarm)} whole farm`}
+              </p>;
+            }
+            return <p className="report-category-total">
+              {incompleteInCategory > 0 ? "No costs included; incomplete items are excluded." : "No complete category total is available while the budget is incomplete."}
+            </p>;
+          })()}
           {category.items.length === 0
             ? <p className="report-empty-cost">{category.id === "transport" && report.transport.state === "farm_gate"
               ? "No transport costs included (farm-gate sale)."
@@ -205,14 +248,15 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
             : <div className="table-scroll" role="region" aria-label={`${category.name} cost items`} tabIndex={0}>
               <table className="report-cost-table">
                 <thead><tr>
-                  <th scope="col">Item</th><th scope="col">Rate / {areaRequirementLabel}</th><th scope="col">Rate unit</th>
-                  <th scope="col">Converted quantity / {areaRequirementLabel}</th><th scope="col">Price</th><th scope="col">Price unit</th>
-                  <th scope="col">Cost / {areaRequirementLabel}</th><th scope="col">Whole-farm cost</th><th scope="col">Notes</th>
+                  <th scope="col">Item</th><th scope="col">Description</th><th scope="col">Rate / {areaRequirementLabel}</th><th scope="col">Rate unit</th>
+                  <th scope="col">Converted quantity / {areaRequirementLabel}</th><th scope="col">Unit price</th><th scope="col">Price unit</th>
+                  <th scope="col">Cost / {areaRequirementLabel}</th><th scope="col">Whole-farm cost</th><th scope="col">Share</th><th scope="col">Notes</th>
                 </tr></thead>
                 <tbody>{category.items.map((row) => <tr key={row.item.id}>
                   <th scope="row">{row.item.name.trim() || "Name not entered"}
                     {!row.result.counted && <small className="report-item-status">Not included — {itemIssue(row, areaUnit)}</small>}
                   </th>
+                  <td>{row.item.description.trim() || "—"}</td>
                   <td>{itemRate(row, areaUnit)}</td>
                   <td>{row.item.yieldLinked ? "kg (linked to main yield)" : row.item.rateUnit ?? "Not selected"}</td>
                   <td>{standardQuantity(row, areaUnit)}</td>
@@ -220,14 +264,15 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
                   <td>{row.item.priceUnit ?? "Not selected"}</td>
                   <td>{row.result.counted ? mwk(areaRequirementPerUnit(row.result.costPerHa, areaUnit)) : "Not included"}</td>
                   <td>{row.result.counted ? money(row.result.costFarm) : "Not included"}</td>
+                  <td>{row.result.counted ? pct(row.result.pctOfTotal) : "Not included"}</td>
                   <td>{row.item.notes.trim() || "—"}</td>
                 </tr>)}</tbody>
               </table>
             </div>}
         </section>)}
         <div className="report-totals">
-          <b>Total variable costs</b><span>{mwk(areaRequirementPerUnit(result.tvcPerHa, areaUnit))} per {areaRequirementLabel}</span>
-          <span>{result.tvcFarm === null ? "Whole-farm total not available until farm area is valid." : `${mwk(result.tvcFarm)} whole farm`}</span>
+          <b>Total variable costs</b><span>{hasCostTotals ? `${totalCostPerArea} per ${areaRequirementLabel}` : totalCostPerArea}</span>
+          <span>{totalCostWholeFarm}</span>
         </div>
       </section>
 
@@ -242,6 +287,7 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
             report.transport.state === "farm_gate" ? null : report.transport.alternativeCostPerHa,
             report.transport.state === "farm_gate" ? null : report.transport.alternativeCostFarm,
             areaUnit,
+            hasCostTotals,
           ).map(([name, value]) => name === `Transport cost per ${areaRequirementLabel} / whole farm` && report.transport.state === "farm_gate"
             ? [name, "Excluded — farm-gate sale."]
             : [name, value])} label="Alternative yield scenario summary" />}
@@ -281,7 +327,7 @@ export default function Reports({ go }: { go: (p: PageId) => void }) {
         </div>
       </section>
       <footer className="report-footer">
-        Generated {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} · iNest Agro — Smarter Farming. Better Decisions.
+        Generated {generatedDate} · iNest Agro — Smarter Farming. Better Decisions.
       </footer>
     </article>
   </>;
