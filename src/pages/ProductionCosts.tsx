@@ -8,13 +8,12 @@ import { getAreaUnitText } from "../lib/areaUnitText.ts";
 import { fmt, mwk, pct } from "../lib/format";
 import type { AreaUnit, CostItem, TransportArrangement, UnitName } from "../types/index.ts";
 
-const UnitSelect = ({ value, onChange, only, label, invalid, errorId, defaultRateUnit, defaultRateUnitLabel }: {
+const UnitSelect = ({ value, onChange, only, label, invalid, errorId }: {
   value: UnitName | null; onChange: (u: UnitName | null) => void; only?: string; label: string; invalid?: boolean; errorId?: string;
-  defaultRateUnit?: UnitName; defaultRateUnitLabel?: string;
 }) =>
   <select aria-label={label} aria-invalid={invalid} aria-describedby={errorId} value={value ?? ""} onChange={(e) => onChange((e.target.value || null) as UnitName | null)}>
     <option value="">Unit…</option>{UNITS.filter((u) => !only || u.type === only).map((u) =>
-      <option key={u.name} value={u.name}>{u.name === defaultRateUnit ? defaultRateUnitLabel ?? u.label : u.label}</option>)}</select>;
+      <option key={u.name} value={u.name}>{u.label}</option>)}</select>;
 
 function ItemForm({ item }: { item: CostItem }) {
   const { result: r, dispatch, inputs } = useStore();
@@ -23,7 +22,7 @@ function ItemForm({ item }: { item: CostItem }) {
   const arrangement = inputs.transportArrangement;
   const areaUnit: AreaUnit = inputs.areaUnit ?? "ha";
   const areaUnitText = getAreaUnitText(areaUnit);
-  const effectiveRateUnit = item.rateUnit ?? areaUnitText.defaultRateUnit;
+  const effectiveRateUnit = item.rateUnit;
   const effectivePriceUnit = item.priceUnit ?? effectiveRateUnit;
   const rt = getUnit(linked ? "kg" : effectiveRateUnit)?.type;
   const std = res.stdUnit;
@@ -73,25 +72,19 @@ function ItemForm({ item }: { item: CostItem }) {
               : (item.rate === null ? null : areaRequirementValue(item.rate))}
               readOnly={linked} onChange={(v) => up({
                 rate: v === null ? null : areaRequirementToHa(v, areaUnit),
-                ...(v !== null && !item.rateUnit ? { rateUnit: areaUnitText.defaultRateUnit } : {}),
-                ...(v !== null && !item.priceUnit ? { priceUnit: effectiveRateUnit } : {}),
               })}
             aria-invalid={!!rateIssue} aria-describedby={rateIssue ? `item-rate-error-${item.id}` : undefined} />
           {linked ? <select disabled aria-label="Rate unit"><option>kg</option></select> : <UnitSelect label="Rate unit" value={effectiveRateUnit} invalid={!!rateIssue}
-            errorId={rateIssue ? `item-rate-error-${item.id}` : undefined} defaultRateUnit={areaUnitText.defaultRateUnit}
-            defaultRateUnitLabel={areaUnitText.defaultRateUnitLabel}
+            errorId={rateIssue ? `item-rate-error-${item.id}` : undefined}
             onChange={(u) => { const t = getUnit(u)?.type; const pt = getUnit(item.priceUnit)?.type; up({ rateUnit: u, priceUnit: !item.priceUnit || (t && pt && t !== pt) ? u : item.priceUnit }); }} />}</div>
           {!linked && <small className="muted">{areaUnitText.inputHint}</small>}
           {rateIssue && <p id={`item-rate-error-${item.id}`} className="err" role="alert">{rateIssue}</p>}</Field>
-        <Field label={`Unit price (MWK per ${effectivePriceUnit})`} htmlFor={`item-price-${item.id}`}><div className="row"><Num id={`item-price-${item.id}`} value={item.price} onChange={(v) => up({
+        <Field label={`Unit price (MWK per ${effectivePriceUnit ?? "unit"})`} htmlFor={`item-price-${item.id}`}><div className="row"><Num id={`item-price-${item.id}`} value={item.price} onChange={(v) => up({
             price: v,
-            ...(!item.rateUnit ? { rateUnit: effectiveRateUnit } : {}),
-            ...(!item.priceUnit ? { priceUnit: effectivePriceUnit } : {}),
           })}
             aria-invalid={!!priceIssue} aria-describedby={priceIssue ? `item-price-error-${item.id}` : undefined} />
           <UnitSelect label="Price is per" value={effectivePriceUnit} only={rt} invalid={!!priceIssue}
             errorId={priceIssue ? `item-price-error-${item.id}` : undefined}
-            defaultRateUnit={areaUnitText.defaultRateUnit} defaultRateUnitLabel={areaUnitText.defaultRateUnitLabel}
             onChange={(u) => up({ priceUnit: u })} /></div>
           {priceIssue && <p id={`item-price-error-${item.id}`} className="err" role="alert">{priceIssue}</p>}</Field>
       </>}
