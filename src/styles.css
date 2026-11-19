@@ -2247,6 +2247,21 @@ details.cost-category > summary.cost-category-summary {
   background: var(--white);
 }
 
+.cost-rate-mode-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: .78rem;
+  font-weight: 650;
+  color: var(--muted, #64748b);
+}
+.cost-rate-mode {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.cost-fields input:disabled {
+  cursor: not-allowed;
+  opacity: .65;
+}
 .cost-fields input[readonly] {
   background: var(--surface-muted);
   border-style: dashed;
