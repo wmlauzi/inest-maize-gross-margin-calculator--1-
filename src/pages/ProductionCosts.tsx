@@ -88,7 +88,7 @@ function ItemForm({ item }: { item: CostItem }) {
             aria-invalid={!!rateIssue} aria-describedby={rateIssue ? `item-rate-error-${item.id}` : undefined} />
           {linked ? <select disabled aria-label="Rate unit"><option>kg</option></select> : <UnitSelect label="Rate unit" value={effectiveRateUnit} invalid={!!rateIssue}
             errorId={rateIssue ? `item-rate-error-${item.id}` : undefined}
-            onChange={(u) => { const t = getUnit(u)?.type; const pt = getUnit(item.priceUnit)?.type; up({ rateUnit: u, priceUnit: !item.priceUnit || (t && pt && t !== pt) ? u : item.priceUnit }); }} />}</div>
+            onChange={(u) => { setTouched((prev) => ({ ...prev, rate: true })); const t = getUnit(u)?.type; const pt = getUnit(item.priceUnit)?.type; up({ rateUnit: u, priceUnit: !item.priceUnit || (t && pt && t !== pt) ? u : item.priceUnit }); }} />}</div>
           {!linked && <small className="muted">{inputMode === "farm_total"
             ? "Enter the total quantity for the full farm area."
             : areaUnitText.inputHint}</small>}
@@ -100,7 +100,7 @@ function ItemForm({ item }: { item: CostItem }) {
             aria-describedby={priceIssue ? `item-price-error-${item.id}` : undefined} />
           <UnitSelect label="Price is per" value={effectivePriceUnit} only={rt} invalid={!!priceIssue}
             errorId={priceIssue ? `item-price-error-${item.id}` : undefined}
-            onChange={(u) => up({ priceUnit: u })} /></div>
+            onChange={(u) => { setTouched((prev) => ({ ...prev, price: true })); up({ priceUnit: u }); }} /></div>
           {priceIssue && <p id={`item-price-error-${item.id}`} className="err" role="alert">{priceIssue}</p>}</Field>
       </>}
       <Field label="Description (optional)" htmlFor={`item-description-${item.id}`}><input id={`item-description-${item.id}`} value={item.description} onChange={(e) => up({ description: e.target.value })} /></Field>
