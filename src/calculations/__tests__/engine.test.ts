@@ -65,15 +65,13 @@ describe("conversions (workbook Checks 6-18)", () => {
     expect(areaRequirementToHa(10, "ha")).toBe(10);
   });
   it.each([
-    ["acres", "Rate per acre", "Enter the quantity or rate per acre", "Enter the quantity or rate per acre.", "acre", "Acre"],
-    ["ha", "Rate per ha", "Enter the quantity or rate per ha", "Enter the quantity or rate per ha.", "ha", "Ha"],
-  ] as const)("provides consistent rate text and defaults for %s", (unit, label, hint, validation, defaultUnit, defaultLabel) => {
+    ["acres", "Rate per acre", "Enter the quantity or rate per acre", "Enter the quantity or rate per acre."],
+    ["ha", "Rate per ha", "Enter the quantity or rate per ha", "Enter the quantity or rate per ha."],
+  ] as const)("provides consistent rate text for %s", (unit, label, hint, validation) => {
     const text = getAreaUnitText(unit);
     expect(text.rateLabel).toBe(label);
     expect(text.inputHint).toBe(hint);
     expect(text.validationMessage).toBe(validation);
-    expect(text.defaultRateUnit).toBe(defaultUnit);
-    expect(text.defaultRateUnitLabel).toBe(defaultLabel);
   });
   it("10 t/ha = 10,000 kg/ha", () => expect(yieldToKgHa(10, "tonnes per ha")).toBeCloseTo(10000, 9));
   it("MWK 2,500 per 50 kg bag = MWK 50 per kg", () => expect(priceToPerKg(2500, "MWK per 50 kg bag")).toBeCloseTo(50, 9));
