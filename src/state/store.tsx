@@ -3,7 +3,7 @@ import { computeBudget } from "../calculations/grossMargin.ts";
 import { COST_CATEGORIES, TRANSPORT_ITEM_ID } from "../data/costCategories.ts";
 import { AREA_UNITS, PRICE_FACTORS, UNITS, YIELD_FACTORS } from "../data/units.ts";
 import type {
-  AreaUnit, BudgetInputs, BudgetResult, CategoryId, CostItem, PriceUnit, TransportArrangement, UnitName, YieldUnit,
+  AreaUnit, BudgetInputs, BudgetResult, CategoryId, CostItem, PriceUnit, RateInputMode, TransportArrangement, UnitName, YieldUnit,
 } from "../types/index.ts";
 
 export interface State { inputs: BudgetInputs; items: CostItem[]; }
@@ -26,7 +26,7 @@ const reducer = (s: State, a: Action): State => {
   switch (a.t) {
     case "input": return { ...s, inputs: { ...s.inputs, ...a.patch } };
     case "add": return { ...s, items: [...s.items, { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-      categoryId: a.categoryId, name: "", description: "", rate: null, rateUnit: null, price: null, priceUnit: null, notes: "", userAdded: true }] };
+      categoryId: a.categoryId, name: "", description: "", rate: null, rateInputMode: "per_area", rateUnit: null, price: null, priceUnit: null, notes: "", userAdded: true }] };
     case "update": return { ...s, items: s.items.map((i) => (i.id === a.id ? { ...i, ...a.patch } : i)) };
     case "remove": return { ...s, items: s.items.filter((i) => i.id !== a.id || !i.userAdded) };
     case "reset": return fresh();
@@ -134,7 +134,8 @@ export function restoreSavedState(raw: string | null): RestoreResult {
         has(rawItem, "rate") && !isNullableNumber(rawItem.rate) ||
         has(rawItem, "price") && !isNullableNumber(rawItem.price) ||
         has(rawItem, "userAdded") && typeof rawItem.userAdded !== "boolean" ||
-        has(rawItem, "yieldLinked") && typeof rawItem.yieldLinked !== "boolean") {
+        has(rawItem, "yieldLinked") && typeof rawItem.yieldLinked !== "boolean" ||
+        has(rawItem, "rateInputMode") && rawItem.rateInputMode !== "per_area" && rawItem.rateInputMode !== "farm_total") {
         return { state: fresh(), message: invalidMessage };
       }
       const rateUnit = readItemUnit(rawItem, "rateUnit", unitNames, () => { recovered = true; });
@@ -158,6 +159,7 @@ export function restoreSavedState(raw: string | null): RestoreResult {
         name: typeof rawItem.name === "string" ? rawItem.name : "",
         description: typeof rawItem.description === "string" ? rawItem.description : "",
         rate: isNullableNumber(rawItem.rate) ? rawItem.rate : null,
+        rateInputMode: (rawItem.rateInputMode === "farm_total" ? "farm_total" : "per_area") as RateInputMode,
         rateUnit,
         price: isNullableNumber(rawItem.price) ? rawItem.price : null,
         priceUnit: priceUnitValue,
